@@ -122,6 +122,13 @@ function renderTabsInto(tabs) {
   two.addEventListener('click', () => { store.twoColumns(); save(); render(); }); tabs.append(two);
   const dup = document.createElement('button'); dup.className = 'global-btn'; dup.textContent = 'duplicate';
   dup.addEventListener('click', () => { const p = store.duplicateFocused(); if (p) { p.url = normalizeUrl(p.url); save(); render(); } }); tabs.append(dup);
+  const goal = document.createElement('button'); goal.className = 'global-btn'; goal.dataset.active = String(goalController && goalController.isActive ? goalController.isActive() : false);
+  goal.textContent = goalController && goalController.isActive && goalController.isActive() ? '🎯 стоп' : '🎯 Goal';
+  goal.title = 'Запустить/остановить Goal Agent (исполнитель = активная панель)';
+  goal.addEventListener('click', () => { startOrStopGoal(); renderTabsOnly(); }); tabs.append(goal);
+  const tgb = document.createElement('button'); tgb.className = 'global-btn'; tgb.textContent = boundPaneId === state.focusedId ? '📤 вкл' : '📤 TG';
+  tgb.title = 'Слать сообщения активной панели в Telegram';
+  tgb.addEventListener('click', toggleBoundPane); tabs.append(tgb);
   const opts = document.createElement('button'); opts.className = 'global-btn'; opts.textContent = '⚙'; opts.title = 'Настройки';
   opts.addEventListener('click', () => chrome.runtime.openOptionsPage()); tabs.append(opts);
 }
@@ -140,10 +147,53 @@ function paneByContentWindow(win) {
   }
   return {};
 }
+// ---- toast / status ----
+function toast(text) {
+  let el = document.getElementById('cgptmp-toast');
+  if (!el) { el = document.createElement('div'); el.id = 'cgptmp-toast'; document.body.appendChild(el); }
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 6000);
+}
+
+// ---- goal controller ----
+let boundPaneId = null; // pane whose messages are mirrored to Telegram
+const boundGen = new Map();
+function iframeForPane(paneId) {
+  const sec = [...app.querySelectorAll('.pane')].find(s => s.dataset.id === paneId);
+  return sec ? sec.querySelector('iframe.chat-frame') : null;
+}
+const goalController = window.CGPTMP.createGoalController({
+  getIframe: iframeForPane,
+  ensureLoaded: (paneId) => { if (!store.isLoaded(paneId)) { store.focusPane(paneId); save(); render(); } },
+  getSettings: () => state.settings,
+  notify: toast,
+  paneIdForSource: (win) => { const { pane } = paneByContentWindow(win); return pane ? pane.id : null; },
+  boundPaneId: () => boundPaneId,
+});
+
 window.addEventListener('message', (e) => {
   if (!CHATGPT_ORIGINS.has(e.origin)) return;
   const d = e.data;
-  if (!d || d.type !== 'cgptmp:nav') return;
+  if (!d) return;
+  goalController.handleMessage(e); // cgptmp:reply / cgptmp:gen for the goal loop
+
+  // Manual "send to Telegram" pane: forward its turns when no goal session runs.
+  if (d.type === 'cgptmp:gen' && boundPaneId && !goalController.isActive()) {
+    const { pane } = paneByContentWindow(e.source);
+    if (pane && pane.id === boundPaneId) {
+      const was = boundGen.get(pane.id);
+      boundGen.set(pane.id, d.generating);
+      if (was === true && d.generating === false) {
+        goalController.requestFinalAnswer(pane.id).then((ans) => {
+          if (ans && state.settings.tgEnabled) chrome.runtime.sendMessage({ type: 'tg-send', text: ans });
+        });
+      }
+    }
+  }
+
+  if (d.type !== 'cgptmp:nav') return;
   const { pane, section } = paneByContentWindow(e.source);
   if (!pane) return;
   pane.url = normalizeUrl(d.url);
@@ -156,6 +206,33 @@ window.addEventListener('message', (e) => {
   if (section) { const t = section.querySelector('.pane-title'); if (t) t.textContent = pane.title; }
   save();
   renderTabsOnly();
+});
+
+function startOrStopGoal() {
+  if (goalController.isActive()) { goalController.stop(); return; }
+  const goal = window.prompt('Финальная цель задачи (что должно быть достигнуто):');
+  if (!goal || !goal.trim()) return;
+  const executorPaneId = state.focusedId;
+  let agent = state.panes.find(p => p.id !== executorPaneId && !p.picker);
+  if (!agent) { store.addPane('https://chatgpt.com/', false, 'Агент'); agent = state.panes[state.panes.length - 1]; save(); render(); }
+  goalController.start({ goal: goal.trim(), executorPaneId, agentPaneId: agent.id });
+}
+function toggleBoundPane() {
+  boundPaneId = boundPaneId === state.focusedId ? null : state.focusedId;
+  toast(boundPaneId ? '📤 Эта панель шлёт сообщения в Telegram' : 'Telegram-зеркало выключено');
+  renderTabsOnly();
+}
+
+// Route Telegram inbound (background fills cgptmp.tg.inbox) into the loop/queue.
+let inboxSeen = 0;
+chrome.storage.local.get(['cgptmp.tg.inbox'], (r) => { inboxSeen = ((r && r['cgptmp.tg.inbox']) || []).length; });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes['cgptmp.tg.inbox']) return;
+  const list = changes['cgptmp.tg.inbox'].newValue || [];
+  if (list.length > inboxSeen) {
+    goalController.handleTgInbound(list.slice(inboxSeen));
+    inboxSeen = list.length;
+  } else { inboxSeen = list.length; }
 });
 
 // React to settings changes (e.g. toggling lazy mode) without a reload.
@@ -173,4 +250,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
   const settings = SETTINGS ? SETTINGS.withDefaults(res[SETTINGS_KEY]) : { lazyPanes: true };
   store.init(res[STORAGE_KEY] || null, settings);
   render();
+  goalController.restore();
 })();
