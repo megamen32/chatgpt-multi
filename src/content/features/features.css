@@ -49,6 +49,32 @@
   border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px; padding: 7px 9px; font: inherit;
 }
 
+/* Native chat picker overlay. */
+#cgptmp-picker {
+  position: fixed; inset: 0; z-index: 2147483647;
+  display: flex; flex-direction: column;
+  background: #0f1012; color: #f4f4f5;
+  font: 14px/1.45 -apple-system, system-ui, sans-serif;
+}
+.cgptmp-pk-bar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.cgptmp-pk-search {
+  flex: 1; background: #17181d; color: #f4f4f5; border: 1px solid rgba(255,255,255,.16);
+  border-radius: 10px; padding: 9px 12px; font: inherit;
+}
+.cgptmp-pk-new {
+  border: 0; background: #10a37f; color: #fff; font-weight: 650;
+  border-radius: 10px; padding: 0 14px; cursor: pointer;
+}
+.cgptmp-pk-new:hover { filter: brightness(1.08); }
+.cgptmp-pk-status { padding: 16px; color: #a1a1aa; }
+.cgptmp-pk-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+.cgptmp-pk-item {
+  display: block; width: 100%; text-align: left; border: 0; cursor: pointer;
+  background: transparent; color: #f4f4f5; border-radius: 9px; padding: 10px 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cgptmp-pk-item:hover { background: rgba(255,255,255,.07); }
+
 /* Auto-collapse old messages: cap height and fade, expand on click. */
 .cgptmp-collapsed {
   max-height: 200px !important;

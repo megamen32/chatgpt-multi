@@ -62,6 +62,8 @@
       "js": [
         "src/lib/settings.js",
         "src/content/title-report.js",
+        "src/lib/picker-model.js",
+        "src/content/picker.js",
         "src/lib/confirm-match.js",
         "src/lib/queue-model.js",
         "src/lib/collapse-model.js",
