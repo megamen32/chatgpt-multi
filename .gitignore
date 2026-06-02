@@ -7,3 +7,7 @@ Trace-*.json
 _metadata/
 node_modules/
 *.bak.*
+
+# Local API dumps (may contain conversation data / tokens)
+responce.json
+response.json
