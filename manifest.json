@@ -20,11 +20,13 @@
     "storage",
     "unlimitedStorage",
     "sidePanel",
+    "alarms",
     "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
-    "https://chat.openai.com/*"
+    "https://chat.openai.com/*",
+    "https://api.telegram.org/*"
   ],
   "commands": {
     "open-app": {
