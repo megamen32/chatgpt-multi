@@ -63,8 +63,10 @@
         "src/lib/settings.js",
         "src/lib/confirm-match.js",
         "src/lib/queue-model.js",
+        "src/lib/collapse-model.js",
         "src/content/features/auto-confirm.js",
         "src/content/features/queue.js",
+        "src/content/features/collapse.js",
         "src/content/features-bundle.js"
       ],
       "css": ["src/content/features/features.css"]
