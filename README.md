@@ -33,11 +33,34 @@ not paying for what you don't look at:
 | Workspace view | `app.html`, `src/app.js`, `src/app.css` |
 | Settings page | `options.html`, `options.js` |
 
+## Features
+
+All toggleable from the settings page; injected into the pane iframes via
+`all_frames` content scripts, with pure logic factored into `src/lib/*` and
+unit-tested.
+
+- **Lazy panes** + **conversation trim** (see above).
+- **Native chat picker** — a `+` pane lists your chats (fetched from
+  `/backend-api/conversations`) without booting the full app; click to open one
+  in that pane. `src/content/picker.js`, `src/lib/picker-model.js`.
+- **Pane title / URL sync** — each pane tracks the chat it shows across SPA
+  navigation, so reloads restore the right chat per pane and the tab shows the
+  real chat name. `src/content/title-report.js`.
+- **Auto-confirm** Custom GPT actions (+ auto-expand tool calls).
+  `src/content/features/auto-confirm.js`, `src/lib/confirm-match.js`.
+- **Prompt queue** with auto-send when ChatGPT goes idle.
+  `src/content/features/queue.js`, `src/lib/queue-model.js`.
+- **Auto-collapse** old messages in the live pane.
+  `src/content/features/collapse.js`, `src/lib/collapse-model.js`.
+
+A single shared `MutationObserver` + rAF scheduler (`features-bundle.js`) drives
+all features and only runs them while the tab is visible.
+
 ## Settings
 
 Open via the ⚙ button in the tab bar or the extension's options page. Toggle
-lazy panes, conversation trim (+ how many messages to keep), and the
-ported features. Changes apply live.
+lazy panes, conversation trim (+ how many messages to keep), and every ported
+feature. Changes apply live.
 
 ## Install
 
@@ -59,8 +82,12 @@ state machine (lazy loading, focus/load transitions, persistence shaping).
 
 ## Roadmap
 
-- [ ] Port auto-confirm + auto-expand (from a standalone extension) as a feature
-- [ ] Port prompt queue with auto-send
-- [ ] Port auto-collapse of old messages in the live pane
-- [ ] Native chat list in the picker pane via `/backend-api/conversations`
-- [ ] Sync pane title with the real chat title (via content-script postMessage)
+- [x] Lazy-load panes + conversation trim
+- [x] Port auto-confirm + auto-expand tool calls
+- [x] Port prompt queue with auto-send
+- [x] Port auto-collapse of old messages in the live pane
+- [x] Native chat list in the picker pane via `/backend-api/conversations`
+- [x] Sync pane title/url with the real chat (content-script postMessage)
+
+Possible next steps: smart reveal of collapsed messages on scroll-up; queue
+keyboard shortcut; per-pane model preselect.

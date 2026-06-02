@@ -28,20 +28,6 @@ const state = store.state;
 
 function save() { chrome.storage.local.set({ [STORAGE_KEY]: store.snapshot() }); }
 
-function injectPickerCss(frame) {
-  try {
-    const doc = frame.contentDocument;
-    if (!doc || doc.getElementById('cgpt-mp-picker-style')) return;
-    const s = doc.createElement('style'); s.id = 'cgpt-mp-picker-style';
-    s.textContent = `
-      html,body{overflow:hidden!important}
-      main,[role=main],form,[data-testid=composer-root]{display:none!important}
-      nav[aria-label="История чата"],nav[aria-label="Chat history"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;z-index:2147483647!important;display:flex!important}
-    `;
-    doc.documentElement.appendChild(s);
-  } catch {}
-}
-
 function buildPaneHead(pane) {
   const head = document.createElement('div'); head.className = 'pane-head';
   const title = document.createElement('div'); title.className = 'pane-title'; title.textContent = pane.title;
@@ -71,7 +57,7 @@ function buildLoadedBody(pane) {
     let current; try { current = frame.contentWindow.location.href; } catch { current = frame.src; }
     pane.url = current;
     if (isChatUrl(current)) { pane.picker = false; pane.title = inferTitle(current, pane.title); }
-    else { try { if (new URL(current).searchParams.get('cgpt_picker') === '1') { pane.picker = true; pane.title = '+ Выбор чата'; injectPickerCss(frame); } } catch {} }
+    else { try { if (new URL(current).searchParams.get('cgpt_picker') === '1') { pane.picker = true; pane.title = '+ Выбор чата'; } } catch {} }
     save(); renderTabsOnly();
   });
   return wrap;
