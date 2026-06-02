@@ -7,49 +7,8 @@
 (function () {
   const QM = window.CGPTMP && window.CGPTMP.QueueModel;
   const defs = (window.CGPTMP = window.CGPTMP || {}).featureDefs = window.CGPTMP.featureDefs || [];
-  if (!QM) { console.warn('[CGPTMP] queue: model missing'); return; }
-
-  // ---- ChatGPT DOM adapter -------------------------------------------------
-  const adapter = {
-    composer() {
-      return document.querySelector('#prompt-textarea, textarea[data-testid="prompt-textarea"], div.ProseMirror[contenteditable="true"]');
-    },
-    sendButton() {
-      return document.querySelector('[data-testid="send-button"], #composer-submit-button, button[aria-label*="Send"]');
-    },
-    isGenerating() {
-      return !!document.querySelector('[data-testid="stop-button"], button[aria-label*="Stop"], button[data-testid="stop-streaming-button"]');
-    },
-    setText(text) {
-      const el = adapter.composer();
-      if (!el) return false;
-      el.focus();
-      if (el.tagName === 'TEXTAREA') {
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(el, text);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-      } else {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        sel.addRange(range);
-        document.execCommand('insertText', false, text);
-      }
-      return true;
-    },
-    send() {
-      const btn = adapter.sendButton();
-      if (btn && !btn.disabled) { btn.click(); return true; }
-      // Fallback: Enter key on the composer.
-      const el = adapter.composer();
-      if (el) {
-        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-        return true;
-      }
-      return false;
-    },
-  };
+  const adapter = window.CGPTMP && window.CGPTMP.chatgptAdapter;
+  if (!QM || !adapter) { console.warn('[CGPTMP] queue: model/adapter missing'); return; }
 
   const storageKey = () => `cgptmp.queue.${location.pathname}`;
 

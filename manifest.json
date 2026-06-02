@@ -63,6 +63,8 @@
       "world": "ISOLATED",
       "js": [
         "src/lib/settings.js",
+        "src/lib/goal-agent.js",
+        "src/content/chatgpt-adapter.js",
         "src/content/title-report.js",
         "src/lib/picker-model.js",
         "src/lib/chat-preview.js",
@@ -73,6 +75,7 @@
         "src/content/features/auto-confirm.js",
         "src/content/features/queue.js",
         "src/content/features/collapse.js",
+        "src/content/agent-runtime.js",
         "src/content/features-bundle.js"
       ],
       "css": ["src/content/features/features.css"]
