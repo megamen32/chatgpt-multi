@@ -6,7 +6,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).QueueModel = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   function createQueue(initial) {
     let items = Array.isArray(initial) ? initial.filter((t) => typeof t === 'string') : [];
 

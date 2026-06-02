@@ -7,7 +7,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).confirmMatch = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const EXCLUDE_WORDS = ['cancel', 'отмена', 'annulliere', 'cerrar', 'fermer', 'annuler', 'annulla', 'anular', 'deny', 'отклонить', 'отказ'];
 
   const CONFIRM_WORDS = [

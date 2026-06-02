@@ -14,7 +14,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).trim = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   function isMessageNode(node) {
     const msg = node && node.message;
     const role = msg && msg.author && msg.author.role;

@@ -7,7 +7,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).collapseModel = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   /**
    * @param {number} count total message elements
    * @param {number} keepVisible how many trailing messages stay expanded

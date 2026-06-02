@@ -12,7 +12,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).goalAgent = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const GOAL_MARKER = 'GOAL REACHED GOAL';
 
   // Account settings to PATCH to false so the agent chat has no memory.

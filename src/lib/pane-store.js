@@ -15,7 +15,7 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else (root.CGPTMP = root.CGPTMP || {}).PaneStore = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const CHATGPT_HOME = 'https://chatgpt.com/';
   const PICKER_URL = 'https://chatgpt.com/?cgpt_picker=1';
   const MAX_PANES = 8;
