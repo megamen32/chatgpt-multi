@@ -56,6 +56,25 @@ unit-tested.
 A single shared `MutationObserver` + rAF scheduler (`features-bundle.js`) drives
 all features and only runs them while the tab is visible.
 
+### Goal Agent + Telegram
+
+- **Goal Agent** (🎯 button) — give a final goal; the focused pane is the
+  *executor*, a second pane is the *agent* (evaluator). After each executor
+  turn the controller extracts only the final answer (no tool calls/reasoning)
+  and asks the agent — in a fresh, **memory-disabled** chat — whether the goal
+  is reached. The agent either lists what's missing (fed back to the executor)
+  or emits the exact marker `GOAL REACHED GOAL` to finish. Memory is disabled by
+  PATCHing account settings before each agent turn. Pure logic:
+  `src/lib/goal-agent.js` + `src/lib/goal-loop.js`; orchestration:
+  `src/goal-controller.js` ↔ `src/content/agent-runtime.js`.
+- **Telegram bridge** — set a bot token + user id in settings. The background
+  service worker (`service-worker.js`) long-polls Telegram on a 1-min alarm
+  (survives restarts) and sends messages chunked to 4096 chars. 📤 mirrors a
+  pane's replies to Telegram; inbound Telegram messages are routed into the
+  executor. On goal completion it posts a report (goal, duration, message
+  count). Granular settings: what to forward (executor/agent, all/last, tool
+  calls, hidden, agent opinion). Pure logic: `src/lib/telegram.js`.
+
 ## Settings
 
 Open via the ⚙ button in the tab bar or the extension's options page. Toggle
