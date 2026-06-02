@@ -53,6 +53,18 @@
       "run_at": "document_start",
       "world": "MAIN",
       "js": ["src/lib/conversation-trim.js", "src/content/perf-fetch-trim.js"]
+    },
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "all_frames": true,
+      "run_at": "document_idle",
+      "world": "ISOLATED",
+      "js": [
+        "src/lib/settings.js",
+        "src/lib/confirm-match.js",
+        "src/content/features/auto-confirm.js",
+        "src/content/features-bundle.js"
+      ]
     }
   ],
   "declarative_net_request": {
