@@ -1,0 +1,11 @@
+{
+  "name": "chatgpt-multi-pane-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-pane ChatGPT workspace Chrome extension.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:perf": "node --test test/perf.test.js"
+  }
+}

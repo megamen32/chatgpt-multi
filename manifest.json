@@ -38,6 +38,23 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "js": ["src/lib/settings.js", "src/content/settings-bridge.js"]
+    },
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "MAIN",
+      "js": ["src/lib/conversation-trim.js", "src/content/perf-fetch-trim.js"]
+    }
+  ],
   "declarative_net_request": {
     "rule_resources": [
       {
