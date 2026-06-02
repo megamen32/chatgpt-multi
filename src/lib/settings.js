@@ -28,6 +28,24 @@
     collapseEnabled: false, // auto-collapse old messages in the live pane
     // UX
     syncPaneTitles: true, // pane tab title follows the real chat title
+
+    // Goal agent (autonomous evaluate-and-iterate loop)
+    goalAgentEnabled: false,
+    goalMarker: 'GOAL REACHED GOAL',
+    goalMaxIterations: 25, // safety cap on agent->executor rounds
+    goalDisableMemory: true, // PATCH account settings to disable memory for the agent
+
+    // Telegram bridge
+    tgEnabled: false,
+    tgBotToken: '',
+    tgUserId: '',
+    tgForwardExecutor: true, // forward executor chat messages to TG
+    tgForwardAgent: false, // forward the agent's evaluations to TG
+    tgSendScope: 'last', // 'all' | 'last' — which executor messages to forward
+    tgToolCalls: 'none', // 'none' | 'input' | 'output' | 'both'
+    tgSendHidden: false, // include hidden/reasoning messages
+    tgSendAgentOpinion: false, // include the agent's "what's missing" opinion
+    tgInboundToExecutor: true, // route TG messages into the executor's queue
   };
 
   // Map of setting key -> dataset attribute name on <html> used by MAIN world.

@@ -29,6 +29,35 @@
         { key: 'syncPaneTitles', type: 'bool', name: 'Имя панели = имя чата', desc: 'Заголовок вкладки панели следует за названием чата.' },
       ],
     },
+    {
+      title: 'Goal Agent (автономный цикл)',
+      items: [
+        { key: 'goalAgentEnabled', type: 'bool', name: 'Включить Goal Agent', desc: 'После ответа исполнителя отдельный чат-оценщик проверяет достижение цели и возвращает, чего не хватает.' },
+        { key: 'goalDisableMemory', type: 'bool', name: 'Отключать память для агента', desc: 'Перед обращением к чату-оценщику отключать память аккаунта (важно для чистой оценки).' },
+        { key: 'goalMaxIterations', type: 'number', name: 'Лимит итераций', desc: 'Максимум раундов агент→исполнитель (защита от зацикливания).', min: 1, max: 200 },
+        { key: 'goalMarker', type: 'text', name: 'Маркер достижения', desc: 'Точная строка, которую агент пишет, когда цель достигнута.' },
+      ],
+    },
+    {
+      title: 'Telegram — основной чат',
+      items: [
+        { key: 'tgEnabled', type: 'bool', name: 'Включить Telegram-мост', desc: 'Слать сообщения ChatGPT в Telegram и принимать ответы обратно.' },
+        { key: 'tgBotToken', type: 'text', name: 'Bot token', desc: 'Токен бота от @BotFather.' },
+        { key: 'tgUserId', type: 'text', name: 'Chat / User ID', desc: 'Числовой id получателя.' },
+        { key: 'tgForwardExecutor', type: 'bool', name: 'Слать сообщения исполнителя', desc: 'Пересылать ответы основного чата в Telegram.' },
+        { key: 'tgSendScope', type: 'select', name: 'Что слать', desc: 'Все сообщения или только последнее за ход.', options: [['last', 'Только последнее'], ['all', 'Все']] },
+        { key: 'tgToolCalls', type: 'select', name: 'Tool calls', desc: 'Пересылать ли вызовы инструментов.', options: [['none', 'Не слать'], ['input', 'Только запрос'], ['output', 'Только ответ'], ['both', 'Запрос и ответ']] },
+        { key: 'tgSendHidden', type: 'bool', name: 'Слать скрытые/рассуждения', desc: 'Включать reasoning/thoughts-сообщения.' },
+        { key: 'tgInboundToExecutor', type: 'bool', name: 'Из Telegram → в очередь', desc: 'Сообщения боту попадают в очередь исполнителя.' },
+      ],
+    },
+    {
+      title: 'Telegram — агент',
+      items: [
+        { key: 'tgForwardAgent', type: 'bool', name: 'Слать сообщения агента', desc: 'Пересылать оценки чата-агента в Telegram.' },
+        { key: 'tgSendAgentOpinion', type: 'bool', name: 'Слать мнение о цели', desc: 'Включать вердикт агента «чего не хватает».' },
+      ],
+    },
   ];
 
   let settings = Object.assign({}, S.DEFAULTS);
@@ -85,6 +114,26 @@
       slider.className = 'slider';
       label.append(input, slider);
       row.appendChild(label);
+    } else if (item.type === 'text') {
+      const input = document.createElement('input');
+      input.type = item.key.toLowerCase().includes('token') ? 'password' : 'text';
+      input.className = 'text-input';
+      input.value = settings[item.key] || '';
+      input.placeholder = item.placeholder || '';
+      const commit = () => { settings[item.key] = input.value.trim(); persist(); };
+      input.addEventListener('change', commit);
+      row.appendChild(input);
+    } else if (item.type === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'text-input';
+      for (const [val, label] of item.options) {
+        const o = document.createElement('option');
+        o.value = val; o.textContent = label;
+        if (settings[item.key] === val) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener('change', () => { settings[item.key] = sel.value; persist(); });
+      row.appendChild(sel);
     } else if (item.type === 'number') {
       const input = document.createElement('input');
       input.type = 'number';
