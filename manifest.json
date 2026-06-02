@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Multi Pane",
+  "description": "Multi-pane ChatGPT workspace inside Chrome: several ChatGPT chats side by side with bottom tabs and picker panes.",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open ChatGPT Multi Pane"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "sidePanel",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "commands": {
+    "open-app": {
+      "suggested_key": {
+        "default": "Alt+J",
+        "mac": "Command+J"
+      },
+      "description": "Open ChatGPT Multi Pane"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_x_frame_options",
+        "enabled": true,
+        "path": "src/rules/x-frame-options.json"
+      },
+      {
+        "id": "ruleset_chatgpt_headers",
+        "enabled": true,
+        "path": "src/rules/chatgpt.json"
+      }
+    ]
+  }
+}

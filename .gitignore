@@ -1,0 +1,9 @@
+# Secrets & local artifacts — NEVER commit
+cookie.json
+*.json.gz
+Trace-*.json
+.DS_Store
+**/.DS_Store
+_metadata/
+node_modules/
+*.bak.*

@@ -1,0 +1,35 @@
+<!doctype html>
+<html translate="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>ChatGPT Multi Pane</title>
+  <link rel="stylesheet" href="src/app.css" />
+  <style>
+    .sidepanel-start { height: 100%; display: grid; place-items: center; padding: 18px; background: #0f1012; color: #f4f4f5; }
+    .sidepanel-card { width: 100%; max-width: 360px; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 16px; background: #17181d; box-shadow: 0 16px 50px rgba(0,0,0,.35); }
+    .sidepanel-card h1 { font-size: 17px; margin: 0 0 8px; }
+    .sidepanel-card p { color: #a1a1aa; font-size: 13px; line-height: 1.45; margin: 0 0 14px; }
+    .sidepanel-card button { width: 100%; height: 38px; border: 0; border-radius: 10px; background: #10a37f; color: white; font-weight: 650; cursor: pointer; }
+    .sidepanel-card button:hover { filter: brightness(1.08); }
+    .sidepanel-card .secondary { margin-top: 10px; background: rgba(255,255,255,.08); }
+  </style>
+</head>
+<body class="compact">
+  <div class="sidepanel-start">
+    <div class="sidepanel-card">
+      <h1>ChatGPT Multi Pane</h1>
+      <p>Основной режим — полноценная вкладка Chrome на всю страницу. Side panel оставлен как дополнительный быстрый вход.</p>
+      <button id="openFull">Открыть на всю страницу</button>
+      <button id="openInline" class="secondary">Показать прямо здесь</button>
+    </div>
+  </div>
+  <script type="module">
+    document.getElementById('openFull').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-workspace' }));
+    document.getElementById('openInline').addEventListener('click', async () => {
+      document.body.innerHTML = '<div id="app"></div>';
+      await import('./src/app.js');
+    });
+  </script>
+</body>
+</html>
