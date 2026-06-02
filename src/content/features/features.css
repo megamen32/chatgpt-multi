@@ -1,0 +1,50 @@
+/* Injected UI for ported features (queue panel, etc.). Scoped under cgptmp-* to
+   avoid clashing with ChatGPT's own styles. */
+.cgptmp-queue {
+  position: fixed;
+  right: 14px;
+  bottom: 92px;
+  width: 280px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(24, 25, 29, 0.97);
+  color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  font: 13px/1.4 -apple-system, system-ui, sans-serif;
+  z-index: 2147483646;
+  overflow: hidden;
+}
+.cgptmp-q-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.cgptmp-q-title { flex: 1; font-weight: 600; }
+.cgptmp-q-title::after { content: " (" attr(data-count) ")"; }
+.cgptmp-queue[data-count="0"] .cgptmp-q-title::after { content: ""; }
+.cgptmp-q-btn {
+  border: 0; background: rgba(255, 255, 255, 0.08); color: #f4f4f5;
+  border-radius: 7px; width: 26px; height: 24px; cursor: pointer;
+}
+.cgptmp-q-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.cgptmp-q-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+.cgptmp-q-list li {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 6px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); margin-bottom: 5px;
+}
+.cgptmp-q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cgptmp-q-mini {
+  border: 0; background: transparent; color: #a1a1aa; cursor: pointer;
+  width: 20px; height: 20px; border-radius: 6px;
+}
+.cgptmp-q-mini:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.cgptmp-q-input { padding: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.cgptmp-q-input textarea {
+  width: 100%; resize: none; background: #0f1012; color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px; padding: 7px 9px; font: inherit;
+}
