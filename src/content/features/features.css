@@ -75,6 +75,32 @@
 }
 .cgptmp-pk-item:hover { background: rgba(255,255,255,.07); }
 
+/* Hover preview panel (last user prompt + assistant reply). */
+.cgptmp-pk-preview {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 42vh; overflow-y: auto;
+  background: #17181d; border-top: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 -14px 40px rgba(0,0,0,.45);
+  padding: 12px 14px 16px; z-index: 1;
+}
+.cgptmp-pk-preview.expanded { max-height: 78vh; }
+.cgptmp-pk-pv-title { font-weight: 650; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cgptmp-pk-pv-loading { color: #a1a1aa; }
+.cgptmp-pk-pv-role { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #71717a; margin: 10px 0 3px; }
+.cgptmp-pk-pv-text {
+  white-space: pre-wrap; word-break: break-word; color: #e4e4e7;
+  background: #0f1012; border: 1px solid rgba(255,255,255,.08);
+  border-radius: 9px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5;
+}
+.cgptmp-pk-preview:not(.expanded) .cgptmp-pk-pv-text { max-height: 6.5em; overflow: hidden; }
+.cgptmp-pk-pv-actions { display: flex; gap: 8px; margin-top: 12px; }
+.cgptmp-pk-pv-toggle, .cgptmp-pk-pv-open {
+  border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06);
+  color: #f4f4f5; border-radius: 8px; padding: 6px 12px; cursor: pointer; font: inherit;
+}
+.cgptmp-pk-pv-open { background: rgba(16,163,127,.18); border-color: rgba(16,163,127,.4); }
+.cgptmp-pk-pv-toggle:hover, .cgptmp-pk-pv-open:hover { filter: brightness(1.15); }
+
 /* Auto-collapse old messages: cap height and fade, expand on click. */
 .cgptmp-collapsed {
   max-height: 200px !important;
