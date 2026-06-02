@@ -61,6 +61,7 @@
       "world": "ISOLATED",
       "js": [
         "src/lib/settings.js",
+        "src/content/title-report.js",
         "src/lib/confirm-match.js",
         "src/lib/queue-model.js",
         "src/lib/collapse-model.js",

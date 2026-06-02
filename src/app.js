@@ -140,6 +140,38 @@ function renderTabsInto(tabs) {
   opts.addEventListener('click', () => chrome.runtime.openOptionsPage()); tabs.append(opts);
 }
 
+// Keep panes in sync with SPA navigation inside their iframes. The pane's
+// content script posts {type:'cgptmp:nav', url, title}; we match the source
+// window to a pane and update its stored url/title/picker without a reload.
+const CHATGPT_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
+function paneByContentWindow(win) {
+  for (const frame of app.querySelectorAll('iframe.chat-frame')) {
+    if (frame.contentWindow === win) {
+      const section = frame.closest('.pane');
+      const id = section && section.dataset.id;
+      return { pane: state.panes.find(p => p.id === id), section };
+    }
+  }
+  return {};
+}
+window.addEventListener('message', (e) => {
+  if (!CHATGPT_ORIGINS.has(e.origin)) return;
+  const d = e.data;
+  if (!d || d.type !== 'cgptmp:nav') return;
+  const { pane, section } = paneByContentWindow(e.source);
+  if (!pane) return;
+  pane.url = normalizeUrl(d.url);
+  let isPicker = false;
+  try { isPicker = new URL(d.url).searchParams.get('cgpt_picker') === '1'; } catch {}
+  pane.picker = isPicker;
+  if (isPicker) pane.title = '+ Выбор чата';
+  else if (state.settings && state.settings.syncPaneTitles && d.title) pane.title = d.title;
+  else if (isChatUrl(d.url)) pane.title = inferTitle(d.url, pane.title);
+  if (section) { const t = section.querySelector('.pane-title'); if (t) t.textContent = pane.title; }
+  save();
+  renderTabsOnly();
+});
+
 // React to settings changes (e.g. toggling lazy mode) without a reload.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[SETTINGS_KEY]) return;
