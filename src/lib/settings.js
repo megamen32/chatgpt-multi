@@ -26,6 +26,12 @@
     autoExpandToolCalls: false,
     queueEnabled: false, // prompt queue with auto-send
     collapseEnabled: false, // auto-collapse old messages in the live pane
+    // Chat cache (instant open from local cache, revalidate in background)
+    cacheEnabled: true,
+    cacheMaxChats: 10, // keep the last N chats
+    cacheMaxMB: 100, // total cache size cap
+    cacheWholeChat: false, // false = cache only as many messages as we display
+
     // UX
     syncPaneTitles: true, // pane tab title follows the real chat title
 
