@@ -1,6 +1,11 @@
 /*
  * Workspace view layer. State lives in the pure, tested PaneStore
- * (src/lib/pane-store.js); this file only renders it and wires persistence.
+ * (src/lib/pane-store.js); this file renders it, wires persistence, and hosts
+ * the goal/Telegram controller.
+ *
+ * Rendering is reconciling: pane <section> elements (which hold live iframes)
+ * are reused and *moved* across renders, never re-created, so reordering /
+ * resizing / adding panes never reloads an existing chat.
  */
 const STORAGE_KEY = 'chatgptMultiPane.v1';
 const CHAT_PATH_RE = /\/(?:g\/[^/]+\/)?c\/[0-9a-f-]{8,}/i;
@@ -25,27 +30,23 @@ function isChatUrl(url) { try { return CHAT_PATH_RE.test(new URL(url).pathname);
 
 const store = createPaneStore({ inferTitle });
 const state = store.state;
+let boundPaneId = null;
+const boundGen = new Map();
+const sectionEls = new Map(); // paneId -> <section>
 
 function save() { chrome.storage.local.set({ [STORAGE_KEY]: store.snapshot() }); }
 
-function buildPaneHead(pane) {
-  const head = document.createElement('div'); head.className = 'pane-head';
-  const title = document.createElement('div'); title.className = 'pane-title'; title.textContent = pane.title;
-  head.append(title);
-  const close = document.createElement('button'); close.className = 'pane-btn'; close.textContent = '×'; close.title = 'Close pane';
-  close.addEventListener('click', e => { e.stopPropagation(); store.closePane(pane.id); save(); render(); });
-  if (store.isLoaded(pane.id)) {
-    const reload = document.createElement('button'); reload.className = 'pane-btn'; reload.textContent = '↻'; reload.title = 'Reload pane';
-    const sleep = document.createElement('button'); sleep.className = 'pane-btn'; sleep.textContent = '☾'; sleep.title = 'Выгрузить (освободить память)';
-    reload.addEventListener('click', e => { e.stopPropagation(); const f = head.parentElement.querySelector('iframe'); if (f) f.src = pane.url; });
-    sleep.addEventListener('click', e => { e.stopPropagation(); store.unloadPane(pane.id); render(); });
-    head.append(reload, sleep, close);
-  } else {
-    head.append(close);
-  }
-  return head;
+// ---------- toast ----------
+function toast(text) {
+  let el = document.getElementById('cgptmp-toast');
+  if (!el) { el = document.createElement('div'); el.id = 'cgptmp-toast'; document.body.appendChild(el); }
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 6000);
 }
 
+// ---------- pane body ----------
 function buildLoadedBody(pane) {
   const wrap = document.createElement('div'); wrap.className = 'frame-wrap';
   const frame = document.createElement('iframe'); frame.className = 'chat-frame'; frame.src = pane.url;
@@ -58,11 +59,10 @@ function buildLoadedBody(pane) {
     pane.url = current;
     if (isChatUrl(current)) { pane.picker = false; pane.title = inferTitle(current, pane.title); }
     else { try { if (new URL(current).searchParams.get('cgpt_picker') === '1') { pane.picker = true; pane.title = '+ Выбор чата'; } } catch {} }
-    save(); renderTabsOnly();
+    save(); refreshChrome();
   });
   return wrap;
 }
-
 function buildPlaceholderBody(pane) {
   const wrap = document.createElement('div'); wrap.className = 'frame-wrap placeholder';
   const card = document.createElement('div'); card.className = 'ph-card';
@@ -76,35 +76,147 @@ function buildPlaceholderBody(pane) {
   return wrap;
 }
 
-function focusPane(id) {
-  const { structural } = store.focusPane(id);
-  save();
-  if (structural) render(); else renderTabsOnly();
+// ---------- pane head (per-chat toolbar) ----------
+function btn(cls, label, title, on) {
+  const b = document.createElement('button'); b.className = 'pane-btn ' + cls; b.textContent = label; b.title = title;
+  b.addEventListener('click', e => { e.stopPropagation(); on(e); });
+  return b;
+}
+function buildPaneHead(pane) {
+  const head = document.createElement('div'); head.className = 'pane-head'; head.draggable = true;
+
+  const role = goalController ? goalController.roleForPane(pane.id) : null;
+  if (role) { const badge = document.createElement('span'); badge.className = 'role-badge ' + role; badge.textContent = role === 'executor' ? 'исполнитель' : 'агент'; head.append(badge); }
+
+  const title = document.createElement('div'); title.className = 'pane-title'; title.textContent = pane.title;
+  head.append(title);
+
+  // pick chat — switch this pane to the picker
+  head.append(btn('pick', '📋', 'Выбрать чат', () => { store.showPicker(pane.id); save(); render(); }));
+
+  // goal
+  const gst = goalController ? goalController.getStatus() : { active: false };
+  if (gst.active && gst.executorPaneId === pane.id) {
+    head.append(btn('goal active', gst.paused ? '▶' : '⏸', gst.paused ? 'Продолжить Goal' : 'Пауза Goal', () => { gst.paused ? goalController.resume() : goalController.pause(); }));
+    head.append(btn('goal', '⏹', 'Остановить Goal', () => goalController.stop()));
+  } else if (!gst.active) {
+    head.append(btn('goal', '🎯', 'Goal Agent: эта панель — исполнитель', () => startGoalWithExecutor(pane.id)));
+  }
+
+  // telegram mirror
+  head.append(btn('tg' + (boundPaneId === pane.id ? ' on' : ''), '📤', 'Слать сообщения этой панели в Telegram', () => toggleBoundPane(pane.id)));
+
+  if (store.isLoaded(pane.id)) {
+    head.append(btn('', '↻', 'Перезагрузить', () => reloadPane(pane.id)));
+    head.append(btn('', '☾', 'Выгрузить (память)', () => { store.unloadPane(pane.id); render(); }));
+  }
+  head.append(btn('', '×', 'Закрыть', () => { store.closePane(pane.id); save(); render(); }));
+
+  // drag-reorder
+  head.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', pane.id); e.dataTransfer.effectAllowed = 'move'; });
+  return head;
+}
+
+// ---------- sections (reconciling) ----------
+function buildSection(pane) {
+  const el = document.createElement('section'); el.className = 'pane'; el.dataset.id = pane.id;
+  el.append(buildPaneHead(pane), store.isLoaded(pane.id) ? buildLoadedBody(pane) : buildPlaceholderBody(pane));
+  el.dataset.loaded = store.isLoaded(pane.id) ? '1' : '0';
+  const rez = document.createElement('div'); rez.className = 'pane-resizer'; el.append(rez);
+  attachResize(rez, pane.id);
+  // focus + drop target
+  el.addEventListener('mousedown', () => { if (state.focusedId !== pane.id) { store.focusPane(pane.id); save(); refreshChrome(); } });
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drop-hint'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drop-hint'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('drop-hint');
+    const dragged = e.dataTransfer.getData('text/plain');
+    if (dragged && store.reorder(dragged, pane.id)) { save(); render(); }
+  });
+  return el;
+}
+function syncSectionBody(el, pane) {
+  const want = store.isLoaded(pane.id);
+  if ((el.dataset.loaded === '1') === want) return;
+  const oldBody = el.querySelector('.frame-wrap');
+  const newBody = want ? buildLoadedBody(pane) : buildPlaceholderBody(pane);
+  if (oldBody) oldBody.replaceWith(newBody); else el.insertBefore(newBody, el.querySelector('.pane-resizer'));
+  el.dataset.loaded = want ? '1' : '0';
 }
 
 function render() {
-  app.replaceChildren();
-  const workspace = document.createElement('div'); workspace.className = 'workspace';
-  const tabs = document.createElement('div'); tabs.className = 'tabs';
-  app.append(workspace, tabs);
+  let workspace = app.querySelector('.workspace');
+  let tabs = app.querySelector('.tabs');
+  if (!workspace) { workspace = document.createElement('div'); workspace.className = 'workspace'; app.append(workspace); }
+  if (!tabs) { tabs = document.createElement('div'); tabs.className = 'tabs'; app.append(tabs); }
 
+  // drop sections for removed panes
+  for (const [id, el] of sectionEls) {
+    if (!state.panes.some(p => p.id === id)) { el.remove(); sectionEls.delete(id); }
+  }
+  // create/update + place in order (appendChild moves, preserving iframes)
   for (const pane of state.panes) {
-    const el = document.createElement('section'); el.className = 'pane'; el.dataset.id = pane.id;
-    const body = store.isLoaded(pane.id) ? buildLoadedBody(pane) : buildPlaceholderBody(pane);
-    el.append(buildPaneHead(pane), body);
-    workspace.append(el);
-    el.addEventListener('mousedown', () => { if (state.focusedId !== pane.id) focusPane(pane.id); });
+    let el = sectionEls.get(pane.id);
+    if (!el) { el = buildSection(pane); sectionEls.set(pane.id, el); }
+    else { const h = el.querySelector('.pane-head'); if (h) h.replaceWith(buildPaneHead(pane)); syncSectionBody(el, pane); }
+    el.style.flexGrow = String(pane.flex || 1);
+    workspace.appendChild(el); // move into current order
   }
   renderTabsInto(tabs);
   applyFocusOutline();
 }
-function renderTabsOnly() {
-  const tabs = app.querySelector('.tabs'); if (tabs) renderTabsInto(tabs);
-  applyFocusOutline();
+function refreshChrome() {
+  for (const pane of state.panes) {
+    const el = sectionEls.get(pane.id);
+    if (el) { const h = el.querySelector('.pane-head'); if (h) h.replaceWith(buildPaneHead(pane)); }
+  }
+  renderTabsOnly();
 }
 function applyFocusOutline() {
-  for (const p of app.querySelectorAll('.pane')) p.style.outline = p.dataset.id === state.focusedId ? '2px solid rgba(16,163,127,.6)' : 'none';
+  for (const [id, el] of sectionEls) el.classList.toggle('focused', id === state.focusedId);
 }
+function reloadPane(id) {
+  const el = sectionEls.get(id); if (!el) return;
+  const f = el.querySelector('iframe.chat-frame');
+  const pane = state.panes.find(p => p.id === id);
+  if (f && pane) f.src = pane.url;
+}
+
+// ---------- resize ----------
+function attachResize(handle, paneId) {
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const el = sectionEls.get(paneId);
+    const next = el && el.nextElementSibling;
+    if (!next) return;
+    const nextId = next.dataset.id;
+    const startX = e.clientX;
+    const w1 = el.getBoundingClientRect().width, w2 = next.getBoundingClientRect().width;
+    const f1 = state.panes.find(p => p.id === paneId).flex || 1;
+    const f2 = state.panes.find(p => p.id === nextId).flex || 1;
+    const totalF = f1 + f2, totalW = w1 + w2;
+    document.body.classList.add('resizing');
+    function move(ev) {
+      const dx = ev.clientX - startX;
+      const nw1 = Math.max(60, Math.min(totalW - 60, w1 + dx));
+      const ratio = nw1 / totalW;
+      store.setFlex(paneId, totalF * ratio);
+      store.setFlex(nextId, totalF * (1 - ratio));
+      el.style.flexGrow = String(state.panes.find(p => p.id === paneId).flex);
+      next.style.flexGrow = String(state.panes.find(p => p.id === nextId).flex);
+    }
+    function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); save(); }
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  });
+}
+
+// ---------- tabs / global bar ----------
+function focusPane(id) {
+  const { structural } = store.focusPane(id);
+  save();
+  if (structural) render(); else { applyFocusOutline(); renderTabsOnly(); }
+}
+function renderTabsOnly() { const tabs = app.querySelector('.tabs'); if (tabs) renderTabsInto(tabs); applyFocusOutline(); }
 function renderTabsInto(tabs) {
   tabs.replaceChildren();
   for (const pane of state.panes) {
@@ -116,70 +228,64 @@ function renderTabsInto(tabs) {
     t.querySelector('.tab-close').addEventListener('click', e => { e.stopPropagation(); store.closePane(pane.id); save(); render(); });
     tabs.append(t);
   }
-  const plus = document.createElement('button'); plus.className = 'plus'; plus.textContent = '+'; plus.title = 'Add picker pane';
+  const plus = document.createElement('button'); plus.className = 'plus'; plus.textContent = '+'; plus.title = 'Новая панель (выбор чата)';
   plus.addEventListener('click', () => { store.addPane(PICKER_URL, true); save(); render(); }); tabs.append(plus);
-  const two = document.createElement('button'); two.className = 'global-btn'; two.dataset.action = 'two'; two.textContent = '2 panes';
-  two.addEventListener('click', () => { store.twoColumns(); save(); render(); }); tabs.append(two);
-  const dup = document.createElement('button'); dup.className = 'global-btn'; dup.textContent = 'duplicate';
-  dup.addEventListener('click', () => { const p = store.duplicateFocused(); if (p) { p.url = normalizeUrl(p.url); save(); render(); } }); tabs.append(dup);
-  const goal = document.createElement('button'); goal.className = 'global-btn'; goal.dataset.active = String(goalController && goalController.isActive ? goalController.isActive() : false);
-  goal.textContent = goalController && goalController.isActive && goalController.isActive() ? '🎯 стоп' : '🎯 Goal';
-  goal.title = 'Запустить/остановить Goal Agent (исполнитель = активная панель)';
-  goal.addEventListener('click', () => { startOrStopGoal(); renderTabsOnly(); }); tabs.append(goal);
-  const tgb = document.createElement('button'); tgb.className = 'global-btn'; tgb.textContent = boundPaneId === state.focusedId ? '📤 вкл' : '📤 TG';
-  tgb.title = 'Слать сообщения активной панели в Telegram';
-  tgb.addEventListener('click', toggleBoundPane); tabs.append(tgb);
+
+  const gst = goalController ? goalController.getStatus() : { active: false };
+  if (gst.active) {
+    const chip = document.createElement('span'); chip.className = 'goal-chip';
+    chip.textContent = `🎯 ${gst.paused ? 'пауза' : gst.phase === 'awaitingAgent' ? 'оценка' : 'работа'} · ${gst.iterations}`;
+    tabs.append(chip);
+  }
   const opts = document.createElement('button'); opts.className = 'global-btn'; opts.textContent = '⚙'; opts.title = 'Настройки';
   opts.addEventListener('click', () => chrome.runtime.openOptionsPage()); tabs.append(opts);
 }
 
-// Keep panes in sync with SPA navigation inside their iframes. The pane's
-// content script posts {type:'cgptmp:nav', url, title}; we match the source
-// window to a pane and update its stored url/title/picker without a reload.
-const CHATGPT_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
+// ---------- goal / telegram ----------
+function startGoalWithExecutor(executorPaneId) {
+  const goal = window.prompt('Финальная цель задачи (что должно быть достигнуто):');
+  if (!goal || !goal.trim()) return;
+  let agent = state.panes.find(p => p.id !== executorPaneId && !p.picker);
+  if (!agent) { agent = store.addPane('https://chatgpt.com/', false, 'Агент'); save(); render(); }
+  goalController.start({ goal: goal.trim(), executorPaneId, agentPaneId: agent.id });
+}
+function toggleBoundPane(id) {
+  boundPaneId = boundPaneId === id ? null : id;
+  toast(boundPaneId ? '📤 Эта панель шлёт сообщения в Telegram' : 'Telegram-зеркало выключено');
+  refreshChrome();
+}
+
+function iframeForPane(paneId) {
+  const el = sectionEls.get(paneId);
+  return el ? el.querySelector('iframe.chat-frame') : null;
+}
 function paneByContentWindow(win) {
-  for (const frame of app.querySelectorAll('iframe.chat-frame')) {
-    if (frame.contentWindow === win) {
-      const section = frame.closest('.pane');
-      const id = section && section.dataset.id;
-      return { pane: state.panes.find(p => p.id === id), section };
-    }
+  for (const [id, el] of sectionEls) {
+    const f = el.querySelector('iframe.chat-frame');
+    if (f && f.contentWindow === win) return { pane: state.panes.find(p => p.id === id), section: el };
   }
   return {};
 }
-// ---- toast / status ----
-function toast(text) {
-  let el = document.getElementById('cgptmp-toast');
-  if (!el) { el = document.createElement('div'); el.id = 'cgptmp-toast'; document.body.appendChild(el); }
-  el.textContent = text;
-  el.classList.add('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove('show'), 6000);
-}
 
-// ---- goal controller ----
-let boundPaneId = null; // pane whose messages are mirrored to Telegram
-const boundGen = new Map();
-function iframeForPane(paneId) {
-  const sec = [...app.querySelectorAll('.pane')].find(s => s.dataset.id === paneId);
-  return sec ? sec.querySelector('iframe.chat-frame') : null;
-}
 const goalController = window.CGPTMP.createGoalController({
   getIframe: iframeForPane,
+  reloadPane,
   ensureLoaded: (paneId) => { if (!store.isLoaded(paneId)) { store.focusPane(paneId); save(); render(); } },
   getSettings: () => state.settings,
   notify: toast,
   paneIdForSource: (win) => { const { pane } = paneByContentWindow(win); return pane ? pane.id : null; },
   boundPaneId: () => boundPaneId,
+  onStatusChange: () => refreshChrome(),
 });
 
+// ---------- cross-frame messages ----------
+const CHATGPT_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com']);
 window.addEventListener('message', (e) => {
   if (!CHATGPT_ORIGINS.has(e.origin)) return;
   const d = e.data;
   if (!d) return;
-  goalController.handleMessage(e); // cgptmp:reply / cgptmp:gen for the goal loop
+  goalController.handleMessage(e);
 
-  // Manual "send to Telegram" pane: forward its turns when no goal session runs.
   if (d.type === 'cgptmp:gen' && boundPaneId && !goalController.isActive()) {
     const { pane } = paneByContentWindow(e.source);
     if (pane && pane.id === boundPaneId) {
@@ -204,45 +310,37 @@ window.addEventListener('message', (e) => {
   else if (state.settings && state.settings.syncPaneTitles && d.title) pane.title = d.title;
   else if (isChatUrl(d.url)) pane.title = inferTitle(d.url, pane.title);
   if (section) { const t = section.querySelector('.pane-title'); if (t) t.textContent = pane.title; }
-  save();
-  renderTabsOnly();
+  save(); renderTabsOnly();
 });
 
-function startOrStopGoal() {
-  if (goalController.isActive()) { goalController.stop(); return; }
-  const goal = window.prompt('Финальная цель задачи (что должно быть достигнуто):');
-  if (!goal || !goal.trim()) return;
-  const executorPaneId = state.focusedId;
-  let agent = state.panes.find(p => p.id !== executorPaneId && !p.picker);
-  if (!agent) { store.addPane('https://chatgpt.com/', false, 'Агент'); agent = state.panes[state.panes.length - 1]; save(); render(); }
-  goalController.start({ goal: goal.trim(), executorPaneId, agentPaneId: agent.id });
-}
-function toggleBoundPane() {
-  boundPaneId = boundPaneId === state.focusedId ? null : state.focusedId;
-  toast(boundPaneId ? '📤 Эта панель шлёт сообщения в Telegram' : 'Telegram-зеркало выключено');
-  renderTabsOnly();
-}
+// Track focus when the user clicks inside a cross-origin iframe (no mousedown
+// bubbles out of it) so the bottom tabs reflect the truly active pane.
+window.addEventListener('blur', () => setTimeout(() => {
+  const el = document.activeElement;
+  if (el && el.tagName === 'IFRAME') {
+    const sec = el.closest('.pane');
+    if (sec && sec.dataset.id !== state.focusedId) { store.focusPane(sec.dataset.id); save(); applyFocusOutline(); renderTabsOnly(); }
+  }
+}, 0));
 
-// Route Telegram inbound (background fills cgptmp.tg.inbox) into the loop/queue.
+// Telegram inbound -> loop/queue
 let inboxSeen = 0;
 chrome.storage.local.get(['cgptmp.tg.inbox'], (r) => { inboxSeen = ((r && r['cgptmp.tg.inbox']) || []).length; });
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes['cgptmp.tg.inbox']) return;
-  const list = changes['cgptmp.tg.inbox'].newValue || [];
-  if (list.length > inboxSeen) {
-    goalController.handleTgInbound(list.slice(inboxSeen));
-    inboxSeen = list.length;
-  } else { inboxSeen = list.length; }
-});
 
-// React to settings changes (e.g. toggling lazy mode) without a reload.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes[SETTINGS_KEY]) return;
-  const next = SETTINGS ? SETTINGS.withDefaults(changes[SETTINGS_KEY].newValue) : (changes[SETTINGS_KEY].newValue || {});
-  const wasLazy = store.isLazy();
-  store.setLazy(!!next.lazyPanes);
-  state.settings = next;
-  if (wasLazy && !store.isLazy()) render();
+  if (area !== 'local') return;
+  if (changes[SETTINGS_KEY]) {
+    const next = SETTINGS ? SETTINGS.withDefaults(changes[SETTINGS_KEY].newValue) : (changes[SETTINGS_KEY].newValue || {});
+    const wasLazy = store.isLazy();
+    store.setLazy(!!next.lazyPanes);
+    state.settings = next;
+    if (wasLazy && !store.isLazy()) render();
+  }
+  if (changes['cgptmp.tg.inbox']) {
+    const list = changes['cgptmp.tg.inbox'].newValue || [];
+    if (list.length > inboxSeen) goalController.handleTgInbound(list.slice(inboxSeen));
+    inboxSeen = list.length;
+  }
 });
 
 (async function init() {

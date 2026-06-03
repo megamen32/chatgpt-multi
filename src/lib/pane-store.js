@@ -117,10 +117,41 @@
     function isLoaded(id) { return state.loaded.has(id); }
     function snapshot() { return { panes: state.panes, focusedId: state.focusedId }; }
 
+    /** Move pane `draggedId` to the position of `targetId` (drag-reorder). */
+    function reorder(draggedId, targetId) {
+      if (draggedId === targetId) return false;
+      const from = state.panes.findIndex((p) => p.id === draggedId);
+      const to = state.panes.findIndex((p) => p.id === targetId);
+      if (from < 0 || to < 0) return false;
+      const [p] = state.panes.splice(from, 1);
+      state.panes.splice(to, 0, p);
+      return true;
+    }
+
+    /** Persisted width weight (flex-grow) for a pane. */
+    function setFlex(id, flex) {
+      const p = state.panes.find((x) => x.id === id);
+      if (!p) return false;
+      const n = Number(flex);
+      p.flex = Math.max(0.2, Math.min(8, Number.isFinite(n) ? n : 1));
+      return true;
+    }
+
+    /** Turn a pane into the chat picker (so the user can switch chats). */
+    function showPicker(id) {
+      const p = state.panes.find((x) => x.id === id);
+      if (!p) return false;
+      p.url = PICKER_URL; p.picker = true; p.title = '+ Выбор чата';
+      ensureLoaded(id);
+      state.focusedId = id;
+      return true;
+    }
+
     return {
       state,
       init, addPane, closePane, focusPane, unloadPane, duplicateFocused,
       twoColumns, setLazy, isLoaded, isLazy, snapshot, defaultPane,
+      reorder, setFlex, showPicker,
       CHATGPT_HOME, PICKER_URL, MAX_PANES,
     };
   }

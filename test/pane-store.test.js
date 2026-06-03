@@ -121,3 +121,30 @@ test('snapshot returns only persisted fields', () => {
   const snap = s.snapshot();
   assert.deepEqual(Object.keys(snap).sort(), ['focusedId', 'panes']);
 });
+
+test('reorder moves a pane to another position', () => {
+  let n = 0;
+  const store = createPaneStore({ uid: () => `id${n++}` });
+  store.init({ panes: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], focusedId: 'a' }, { lazyPanes: false });
+  assert.equal(store.reorder('c', 'a'), true);
+  assert.deepEqual(store.state.panes.map((p) => p.id), ['c', 'a', 'b']);
+  assert.equal(store.reorder('x', 'a'), false);
+  assert.equal(store.reorder('a', 'a'), false);
+});
+
+test('setFlex clamps the width weight', () => {
+  const store = createPaneStore({ uid: () => 'x' });
+  store.init({ panes: [{ id: 'a' }], focusedId: 'a' }, { lazyPanes: false });
+  store.setFlex('a', 100);
+  assert.equal(store.state.panes[0].flex, 8);
+  store.setFlex('a', 0);
+  assert.equal(store.state.panes[0].flex, 0.2);
+});
+
+test('showPicker converts a pane into the picker and focuses it', () => {
+  const store = createPaneStore({ uid: () => 'x' });
+  store.init({ panes: [{ id: 'a', url: 'https://chatgpt.com/c/xyz', picker: false }], focusedId: 'a' }, { lazyPanes: true });
+  store.showPicker('a');
+  assert.equal(store.state.panes[0].picker, true);
+  assert.ok(store.state.panes[0].url.includes('cgpt_picker'));
+});
