@@ -20,6 +20,10 @@
     'पुष्टि करें', 'ਪੁਸ਼ਟੀ ਕਰੋ', 'ಸ್ಥಿರೀಕರಿಸಿ', 'స్థిరీకరించు',
     'உறுதிப்படுத்து', 'အတည်ပြုပါ', 'ยืนยัน', '确认', '確認', '확인', 'დაადასტურეთ',
     'հաստատել', 'растау', 'баталгаажуулах', 'አረጋግጥ',
+    // "Allow" — ChatGPT Action permission dialogs use this rather than "confirm"
+    'allow', 'always allow', 'разрешить', 'разрешаю', 'permitir', 'autoriser', 'erlauben',
+    'zulassen', 'consenti', 'permetti', 'toestaan', 'tillåt', 'tillad', 'salli', 'engedélyez',
+    'дозволити', 'дозволяю', '允许', '允許', '허용', '許可', 'อนุญาต', 'izinkan',
   ].map((w) => w.trim().toLowerCase());
 
   const CONFIRM_SET = new Set(CONFIRM_WORDS);

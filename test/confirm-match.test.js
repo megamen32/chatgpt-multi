@@ -39,3 +39,9 @@ test('isExcluded detects substrings', () => {
   assert.equal(isExcluded('cancel order'), true);
   assert.equal(isExcluded('confirm'), false);
 });
+
+test('matches "Allow" / "Разрешить" used by Action permission dialogs', () => {
+  for (const w of ['Allow', 'Разрешить', 'разрешаю', 'Always allow', 'Autoriser', 'Erlauben', '허용']) {
+    assert.equal(isConfirmText(w), true, `should match ${w}`);
+  }
+});
