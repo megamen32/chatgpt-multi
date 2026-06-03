@@ -309,8 +309,13 @@ function handleInbound(items) {
       continue;
     }
     if (/^\/status\b/i.test(text)) { handleStatus(paneId, it); continue; }
+    if (/^\/id\b/i.test(text)) {
+      const paste = it.threadId ? `${it.chatId}/${it.threadId}` : `${it.chatId}`;
+      tgReply(it, `Этот чат/топик:\nchat_id: ${it.chatId}\ntopic_id: ${it.threadId || '— (нет топика)'}\n\nВставьте в кнопку 📤 на панели:\n${paste}`);
+      continue;
+    }
     if (/^\/help\b/i.test(text)) {
-      tgReply(it, 'Команды:\n/link — ссылка на чат\n/status — состояние чата\nЛюбой другой текст уходит в очередь чата.');
+      tgReply(it, 'Команды:\n/id — chat_id и topic_id этого места (для кнопки 📤)\n/link — ссылка на чат\n/status — состояние чата\nЛюбой другой текст уходит в очередь чата.');
       continue;
     }
     if (!state.settings.tgInboundToExecutor) continue;
