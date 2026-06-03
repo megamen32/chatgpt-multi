@@ -51,7 +51,7 @@
   function limits() {
     const ds = document.documentElement.dataset;
     const maxChats = Number(ds.cgptmpCacheMaxChats) || 10;
-    const maxBytes = (Number(ds.cgptmpCacheMaxMb) || 100) * 1024 * 1024;
+    const maxBytes = (Number(ds.cgptmpCacheMb) || 100) * 1024 * 1024;
     return { maxChats, maxBytes };
   }
 
