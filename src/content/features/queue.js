@@ -33,15 +33,54 @@
       panel.className = 'cgptmp-queue';
       panel.innerHTML = `
         <div class="cgptmp-q-head">
+          <span class="cgptmp-q-grip" title="Перетащить">⋮⋮</span>
           <span class="cgptmp-q-title">Очередь</span>
           <button class="cgptmp-q-btn" data-act="pause" title="Пауза/Старт">⏸</button>
           <button class="cgptmp-q-btn" data-act="clear" title="Очистить">🗑</button>
+          <button class="cgptmp-q-btn" data-act="collapse" title="Свернуть">▾</button>
         </div>
         <ul class="cgptmp-q-list"></ul>
         <div class="cgptmp-q-input">
           <textarea rows="1" placeholder="Добавить промпт… (Enter)"></textarea>
         </div>`;
       document.body.appendChild(panel);
+
+      // collapse / expand
+      const collapseBtn = panel.querySelector('[data-act="collapse"]');
+      let collapsed = false;
+      function applyCollapsed() {
+        panel.classList.toggle('collapsed', collapsed);
+        collapseBtn.textContent = collapsed ? '▸' : '▾';
+        collapseBtn.title = collapsed ? 'Развернуть' : 'Свернуть';
+        chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos } });
+      }
+      collapseBtn.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
+
+      // drag the whole panel by its header
+      let pos = null; // {left, top}
+      const headEl = panel.querySelector('.cgptmp-q-head');
+      headEl.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.cgptmp-q-btn')) return;
+        e.preventDefault();
+        const r = panel.getBoundingClientRect();
+        const offX = e.clientX - r.left, offY = e.clientY - r.top;
+        function move(ev) {
+          pos = { left: Math.max(0, Math.min(innerWidth - 60, ev.clientX - offX)), top: Math.max(0, Math.min(innerHeight - 30, ev.clientY - offY)) };
+          panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px';
+          panel.style.right = 'auto'; panel.style.transform = 'none';
+        }
+        function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos } }); }
+        document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+      });
+
+      // restore saved UI state
+      chrome.storage.local.get(['cgptmp.queue.ui'], (r) => {
+        const ui = r && r['cgptmp.queue.ui'];
+        if (ui) {
+          collapsed = !!ui.collapsed; applyCollapsed();
+          if (ui.pos) { pos = ui.pos; panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px'; panel.style.right = 'auto'; panel.style.transform = 'none'; }
+        }
+      });
 
       const listEl = panel.querySelector('.cgptmp-q-list');
       const inputEl = panel.querySelector('textarea');

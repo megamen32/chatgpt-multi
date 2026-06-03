@@ -2,9 +2,10 @@
    avoid clashing with ChatGPT's own styles. */
 .cgptmp-queue {
   position: fixed;
-  right: 14px;
-  bottom: 92px;
-  width: 280px;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
   max-height: 50vh;
   display: flex;
   flex-direction: column;
@@ -17,13 +18,20 @@
   z-index: 2147483646;
   overflow: hidden;
 }
+.cgptmp-queue.collapsed { max-height: none; }
+.cgptmp-queue.collapsed .cgptmp-q-list,
+.cgptmp-queue.collapsed .cgptmp-q-input { display: none; }
 .cgptmp-q-head {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: grab;
 }
+.cgptmp-queue.collapsed .cgptmp-q-head { border-bottom: 0; }
+.cgptmp-q-head:active { cursor: grabbing; }
+.cgptmp-q-grip { color: #71717a; cursor: grab; user-select: none; letter-spacing: -2px; }
 .cgptmp-q-title { flex: 1; font-weight: 600; }
 .cgptmp-q-title::after { content: " (" attr(data-count) ")"; }
 .cgptmp-queue[data-count="0"] .cgptmp-q-title::after { content: ""; }
