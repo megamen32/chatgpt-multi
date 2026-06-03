@@ -30,9 +30,11 @@ function isChatUrl(url) { try { return CHAT_PATH_RE.test(new URL(url).pathname);
 
 const store = createPaneStore({ inferTitle });
 const state = store.state;
-let boundPaneId = null;
+const BOUND_KEY = 'cgptmp.tg.boundTargets';
+let boundTargets = {}; // paneId -> { chatId, threadId } : mirror this pane to a TG chat/topic
 const boundGen = new Map();
 const sectionEls = new Map(); // paneId -> <section>
+function saveBound() { chrome.storage.local.set({ [BOUND_KEY]: boundTargets }); }
 
 function save() { chrome.storage.local.set({ [STORAGE_KEY]: store.snapshot() }); }
 
@@ -103,8 +105,10 @@ function buildPaneHead(pane) {
     head.append(btn('goal', '🎯', 'Goal Agent: эта панель — исполнитель', () => startGoalWithExecutor(pane.id)));
   }
 
-  // telegram mirror
-  head.append(btn('tg' + (boundPaneId === pane.id ? ' on' : ''), '📤', 'Слать сообщения этой панели в Telegram', () => toggleBoundPane(pane.id)));
+  // telegram mirror (per-pane target: chat / forum topic)
+  const tgt = boundTargets[pane.id];
+  const tgTitle = tgt ? `Telegram: ${tgt.chatId || 'по умолчанию'}${tgt.threadId ? '/' + tgt.threadId : ''} (клик — изменить)` : 'Слать сообщения этой панели в Telegram';
+  head.append(btn('tg' + (tgt ? ' on' : ''), '📤', tgTitle, () => configureBoundPane(pane.id)));
 
   if (store.isLoaded(pane.id)) {
     head.append(btn('', '↻', 'Перезагрузить', () => reloadPane(pane.id)));
@@ -249,10 +253,71 @@ function startGoalWithExecutor(executorPaneId) {
   if (!agent) { agent = store.addPane('https://chatgpt.com/', false, 'Агент'); save(); render(); }
   goalController.start({ goal: goal.trim(), executorPaneId, agentPaneId: agent.id });
 }
-function toggleBoundPane(id) {
-  boundPaneId = boundPaneId === id ? null : id;
-  toast(boundPaneId ? '📤 Эта панель шлёт сообщения в Telegram' : 'Telegram-зеркало выключено');
+function configureBoundPane(id) {
+  const cur = boundTargets[id];
+  const def = cur ? `${cur.chatId || ''}${cur.threadId ? '/' + cur.threadId : ''}` : '';
+  const ans = window.prompt(
+    'Telegram-назначение для этой панели:\n' +
+    '• chat_id  или  chat_id/topic_id (для топиков форум-группы)\n' +
+    '• пусто = слать в чат по умолчанию из настроек\n' +
+    '• "-" = отвязать', def);
+  if (ans === null) return;
+  const v = ans.trim();
+  if (v === '-') delete boundTargets[id];
+  else if (v === '') boundTargets[id] = { chatId: null, threadId: null };
+  else { const [c, t] = v.split('/'); boundTargets[id] = { chatId: (c || '').trim() || null, threadId: (t || '').trim() || null }; }
+  saveBound();
+  toast(boundTargets[id] ? '📤 Панель привязана к Telegram' : 'Telegram-зеркало выключено');
   refreshChrome();
+}
+
+function paneForTarget(chatId, threadId) {
+  for (const [pid, t] of Object.entries(boundTargets)) {
+    if (String(t.chatId || '') === String(chatId || '') && String(t.threadId || '') === String(threadId || '')) return pid;
+  }
+  return null;
+}
+function tgReply(item, text) {
+  chrome.runtime.sendMessage({ type: 'tg-send', text, chatId: item.chatId || undefined, messageThreadId: item.threadId || undefined });
+}
+function handleStatus(paneId, item) {
+  const pane = state.panes.find(p => p.id === paneId);
+  if (!pane) { tgReply(item, 'Нет привязанного чата.'); return; }
+  store.isLoaded(paneId) || (store.focusPane(paneId), save(), render());
+  goalController.cmd(paneId, 'chatStatus').then((st) => {
+    const fmt = (t) => t ? new Date(t * 1000).toLocaleString('ru-RU') : '—';
+    const ago = (t) => t ? Math.round((Date.now() / 1000 - t) / 60) + ' мин назад' : '—';
+    tgReply(item, [
+      `📊 ${st.title || pane.title}`,
+      `URL: ${pane.url}`,
+      `Генерирует сейчас: ${st.generating ? 'да ⏳' : 'нет'}`,
+      `Ответ ИИ: ${fmt(st.assistantAt)} (${ago(st.assistantAt)})`,
+      `Сообщение юзера: ${fmt(st.userAt)} (${ago(st.userAt)})`,
+    ].join('\n'));
+  }).catch(() => tgReply(item, 'Не удалось получить статус (панель спит или грузится).'));
+}
+function handleInbound(items) {
+  if (!state.settings.tgEnabled) return;
+  for (const it of items) {
+    const text = (it.text || '').trim();
+    let paneId = paneForTarget(it.chatId, it.threadId);
+    if (!paneId) { const st = goalController.getStatus(); paneId = st.active ? st.executorPaneId : state.focusedId; }
+
+    if (/^\/link\b/i.test(text)) {
+      const pane = state.panes.find(p => p.id === paneId);
+      tgReply(it, pane ? `🔗 ${pane.title}\n${pane.url}` : 'Нет привязанного чата. Нажмите 📤 на нужной панели.');
+      continue;
+    }
+    if (/^\/status\b/i.test(text)) { handleStatus(paneId, it); continue; }
+    if (/^\/help\b/i.test(text)) {
+      tgReply(it, 'Команды:\n/link — ссылка на чат\n/status — состояние чата\nЛюбой другой текст уходит в очередь чата.');
+      continue;
+    }
+    if (!state.settings.tgInboundToExecutor) continue;
+    if (!paneId) { tgReply(it, 'Не настроена панель для этого топика. В ChatGPT нажмите 📤 на нужной панели.'); continue; }
+    if (!store.isLoaded(paneId)) { store.focusPane(paneId); save(); render(); }
+    goalController.cmd(paneId, 'send', { text }).catch(() => tgReply(it, 'Не удалось доставить сообщение в чат.'));
+  }
 }
 
 function iframeForPane(paneId) {
@@ -274,7 +339,6 @@ const goalController = window.CGPTMP.createGoalController({
   getSettings: () => state.settings,
   notify: toast,
   paneIdForSource: (win) => { const { pane } = paneByContentWindow(win); return pane ? pane.id : null; },
-  boundPaneId: () => boundPaneId,
   onStatusChange: () => refreshChrome(),
 });
 
@@ -286,14 +350,16 @@ window.addEventListener('message', (e) => {
   if (!d) return;
   goalController.handleMessage(e);
 
-  if (d.type === 'cgptmp:gen' && boundPaneId && !goalController.isActive()) {
+  // Mirror a bound pane's finished turn to its Telegram chat/topic.
+  if (d.type === 'cgptmp:gen') {
     const { pane } = paneByContentWindow(e.source);
-    if (pane && pane.id === boundPaneId) {
+    if (pane && boundTargets[pane.id]) {
       const was = boundGen.get(pane.id);
       boundGen.set(pane.id, d.generating);
-      if (was === true && d.generating === false) {
+      if (was === true && d.generating === false && state.settings.tgEnabled) {
+        const t = boundTargets[pane.id];
         goalController.requestFinalAnswer(pane.id).then((ans) => {
-          if (ans && state.settings.tgEnabled) chrome.runtime.sendMessage({ type: 'tg-send', text: ans });
+          if (ans) chrome.runtime.sendMessage({ type: 'tg-send', text: ans, chatId: t.chatId || undefined, messageThreadId: t.threadId || undefined });
         });
       }
     }
@@ -338,14 +404,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (changes['cgptmp.tg.inbox']) {
     const list = changes['cgptmp.tg.inbox'].newValue || [];
-    if (list.length > inboxSeen) goalController.handleTgInbound(list.slice(inboxSeen));
+    if (list.length > inboxSeen) handleInbound(list.slice(inboxSeen));
     inboxSeen = list.length;
   }
+  if (changes[BOUND_KEY]) boundTargets = changes[BOUND_KEY].newValue || {};
 });
 
 (async function init() {
-  const res = await new Promise(r => chrome.storage.local.get([STORAGE_KEY, SETTINGS_KEY], r));
+  const res = await new Promise(r => chrome.storage.local.get([STORAGE_KEY, SETTINGS_KEY, BOUND_KEY], r));
   const settings = SETTINGS ? SETTINGS.withDefaults(res[SETTINGS_KEY]) : { lazyPanes: true };
+  boundTargets = res[BOUND_KEY] || {};
   store.init(res[STORAGE_KEY] || null, settings);
   render();
   goalController.restore();

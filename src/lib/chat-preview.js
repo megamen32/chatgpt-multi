@@ -64,5 +64,29 @@
     return clean.slice(0, head).trim() + ' … ' + clean.slice(-tail).trim();
   }
 
-  return { extractPreview, excerpt, messageText };
+  /**
+   * Latest user/assistant message timestamps (epoch seconds) on the active
+   * branch — used by /status to tell whether a chat is "alive".
+   * @returns {{userAt:number, assistantAt:number}}
+   */
+  function lastActivity(data) {
+    const out = { userAt: 0, assistantAt: 0 };
+    if (!data || !data.mapping || !data.current_node) return out;
+    const mapping = data.mapping;
+    const seen = new Set();
+    let id = data.current_node;
+    while (id && mapping[id] && !seen.has(id)) {
+      seen.add(id);
+      const node = mapping[id];
+      const r = node.message && node.message.author && node.message.author.role;
+      const t = node.message && node.message.create_time;
+      if (r === 'assistant' && !out.assistantAt && t) out.assistantAt = t;
+      if (r === 'user' && !out.userAt && t) out.userAt = t;
+      if (out.userAt && out.assistantAt) break;
+      id = node.parent;
+    }
+    return out;
+  }
+
+  return { extractPreview, excerpt, messageText, lastActivity };
 });

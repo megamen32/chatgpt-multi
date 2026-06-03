@@ -59,7 +59,9 @@ async function tgSend(text, opts = {}) {
   const chunks = TG.chunkText(text);
   let last = null;
   for (const chunk of chunks) {
-    last = await tgApi(token, 'sendMessage', { chat_id: chatId, text: chunk, disable_web_page_preview: true });
+    const payload = { chat_id: chatId, text: chunk, disable_web_page_preview: true };
+    if (opts.messageThreadId) payload.message_thread_id = opts.messageThreadId; // forum topics
+    last = await tgApi(token, 'sendMessage', payload);
     if (last && last.ok === false) return last;
   }
   return last || { ok: true };
@@ -83,9 +85,13 @@ async function tgPoll() {
       newOffset = upd.update_id + 1;
       const msg = upd.message || upd.edited_message;
       if (!msg || !msg.text) continue;
-      // only accept the configured user, when set
-      if (s.tgUserId && String(msg.chat && msg.chat.id) !== String(s.tgUserId)) continue;
-      inbound.push({ text: msg.text, at: Date.now() });
+      inbound.push({
+        text: msg.text,
+        chatId: msg.chat && msg.chat.id,
+        threadId: msg.message_thread_id || null, // forum topic id
+        from: msg.from && msg.from.id,
+        at: Date.now(),
+      });
     }
     await new Promise((r) => chrome.storage.local.set({ [OFFSET_KEY]: newOffset }, r));
     if (inbound.length) {

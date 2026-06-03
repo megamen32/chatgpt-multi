@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { extractPreview, excerpt, messageText } = require('../src/lib/chat-preview.js');
+const { extractPreview, excerpt, messageText, lastActivity } = require('../src/lib/chat-preview.js');
 const { makeConversation } = require('./fixtures/conversation.js');
 
 test('extractPreview returns the most recent user + assistant text', () => {
@@ -43,4 +43,17 @@ test('excerpt clips long text to head … tail', () => {
 
 test('excerpt collapses runs of spaces/blank lines', () => {
   assert.equal(excerpt('a    b\n\n\n\nc'), 'a b\n\nc');
+});
+
+test('lastActivity returns latest user/assistant timestamps', () => {
+  const mk = (id, parent, role, t) => ({ id, parent, children: [], message: { author: { role }, create_time: t, recipient: 'all', content: { content_type: 'text', parts: ['x'] } } });
+  const mapping = {
+    root: { id: 'root', parent: null, children: ['u'], message: null },
+    u: mk('u', 'root', 'user', 100),
+    a: mk('a', 'u', 'assistant', 200),
+  };
+  const out = lastActivity({ mapping, current_node: 'a', root: 'root' });
+  assert.equal(out.userAt, 100);
+  assert.equal(out.assistantAt, 200);
+  assert.deepEqual(lastActivity(null), { userAt: 0, assistantAt: 0 });
 });

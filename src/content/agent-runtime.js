@@ -11,6 +11,7 @@
   if (window.parent === window) return; // only meaningful as an embedded pane
   const A = window.CGPTMP && window.CGPTMP.chatgptAdapter;
   const GA = window.CGPTMP && window.CGPTMP.goalAgent;
+  const CP = window.CGPTMP && window.CGPTMP.chatPreview;
   if (!A || !GA) { console.warn('[CGPTMP] agent-runtime: deps missing'); return; }
 
   function reply(requestId, payload) {
@@ -40,6 +41,13 @@
           try { results[f] = await A.patchSetting(f, 'false'); } catch { results[f] = false; }
         }
         return { ok: true, results };
+      }
+      case 'chatStatus': {
+        const out = { generating: A.isGenerating(), convId: A.convId(), title: document.title, url: location.href, userAt: 0, assistantAt: 0 };
+        try {
+          if (CP && A.convId()) { const data = await A.fetchConversation(); const a = CP.lastActivity(data); out.userAt = a.userAt; out.assistantAt = a.assistantAt; }
+        } catch {}
+        return out;
       }
       case 'newChat':
         location.assign('/');

@@ -246,6 +246,7 @@
     return {
       start, stop, pause, resume, handleMessage, handleTgInbound, restore,
       isActive, isPaused, getStatus, roleForPane, requestFinalAnswer,
+      cmd: sendCmd,
     };
   }
 
