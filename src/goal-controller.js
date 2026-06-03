@@ -93,10 +93,19 @@
           if (!r || !r.ok) throw new Error('не удалось отправить исполнителю');
         } else if (action.type === 'sendToAgent') {
           ctx.ensureLoaded(cfg.agentPaneId);
-          await sendCmd(cfg.agentPaneId, 'newChat').catch(() => {});
-          await waitPaneReady(cfg.agentPaneId);
-          const s = ctx.getSettings();
-          if (s.goalDisableMemory) await sendCmd(cfg.agentPaneId, 'patchMemory', { features: GA.MEMORY_DISABLE_FEATURES }).catch(() => {});
+          // One persistent agent chat for the whole session: it keeps context of
+          // previous evaluations (memory is disabled at account level, so this is
+          // only the in-conversation history, which helps judge progress). We
+          // create the chat + disable memory only on the first evaluation.
+          if (!cfg.agentStarted) {
+            await sendCmd(cfg.agentPaneId, 'newChat').catch(() => {});
+            await waitPaneReady(cfg.agentPaneId);
+            const s = ctx.getSettings();
+            if (s.goalDisableMemory) await sendCmd(cfg.agentPaneId, 'patchMemory', { features: GA.MEMORY_DISABLE_FEATURES }).catch(() => {});
+            cfg.agentStarted = true;
+          } else {
+            await waitPaneReady(cfg.agentPaneId);
+          }
           const r = await sendCmd(cfg.agentPaneId, 'send', { text: action.text });
           if (!r || !r.ok) throw new Error('не удалось отправить агенту');
         } else if (action.type === 'finish') {
