@@ -54,7 +54,7 @@
       "all_frames": true,
       "run_at": "document_start",
       "world": "MAIN",
-      "js": ["src/lib/conversation-trim.js", "src/content/perf-fetch-trim.js"]
+      "js": ["src/lib/conversation-trim.js", "src/lib/cache-policy.js", "src/content/chat-cache.js", "src/content/perf-fetch-trim.js"]
     },
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],

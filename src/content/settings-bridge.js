@@ -16,6 +16,10 @@
     const root = document.documentElement;
     root.dataset.cgptmpTrimEnabled = settings.trimEnabled ? 'on' : 'off';
     root.dataset.cgptmpTrimLimit = String(settings.trimLimit);
+    root.dataset.cgptmpCacheEnabled = settings.cacheEnabled ? 'on' : 'off';
+    root.dataset.cgptmpCacheWhole = settings.cacheWholeChat ? 'on' : 'off';
+    root.dataset.cgptmpCacheMaxChats = String(settings.cacheMaxChats);
+    root.dataset.cgptmpCacheMb = String(settings.cacheMaxMB);
   }
 
   // Seed defaults synchronously so the very first conversation fetch is covered
