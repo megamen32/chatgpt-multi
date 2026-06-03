@@ -56,13 +56,19 @@
     Promise.resolve(handle(msg.cmd, msg)).then((res) => reply(msg.requestId, res));
   });
 
-  // Report generation-state changes (poll: robust against React DOM churn).
-  let lastGen = null;
+  // Report generation-state changes. To avoid firing on brief streaming gaps
+  // (and the window between the stop button vanishing and image-gen finishing),
+  // a transition to "idle" must hold for two consecutive polls before we emit.
+  let reported = null; // last value we told the parent
+  let idleStreak = 0;
   setInterval(() => {
     const gen = A.isGenerating();
-    if (gen !== lastGen) {
-      lastGen = gen;
-      try { window.parent.postMessage({ type: 'cgptmp:gen', generating: gen, convId: A.convId() }, '*'); } catch {}
+    if (gen) idleStreak = 0; else idleStreak++;
+    const stable = gen ? true : idleStreak >= 2; // ~1.2s of confirmed idle
+    const value = gen ? true : (stable ? false : reported);
+    if (value !== reported && value !== null) {
+      reported = value;
+      try { window.parent.postMessage({ type: 'cgptmp:gen', generating: value, convId: A.convId() }, '*'); } catch {}
     }
   }, 600);
 })();

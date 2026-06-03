@@ -25,7 +25,7 @@
     const detectGoalMarker = o.detectGoalMarker || ((t, m) => t.includes(m));
     const formatReport = o.formatReport || (() => 'done');
 
-    const state = {
+    const state = Object.assign({
       phase: 'new', // new | awaitingExecutor | awaitingAgent | done | aborted
       goal,
       marker,
@@ -33,7 +33,7 @@
       agentMsgCount: 0, // messages sent from agent to executor
       startedAt: 0,
       lastAgentAnswer: '',
-    };
+    }, o.initialState || {}); // rehydrate a persisted session
 
     function start(now = Date.now()) {
       if (state.phase !== 'new') return { type: 'noop' };
