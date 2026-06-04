@@ -61,10 +61,25 @@ async function tgSend(text, opts = {}) {
   for (const chunk of chunks) {
     const payload = { chat_id: chatId, text: chunk, disable_web_page_preview: true };
     if (opts.messageThreadId) payload.message_thread_id = opts.messageThreadId; // forum topics
+    if (opts.replyMarkup) payload.reply_markup = opts.replyMarkup;
     last = await tgApi(token, 'sendMessage', payload);
     if (last && last.ok === false) return last;
   }
   return last || { ok: true };
+}
+
+async function tgCreateTopic(name, opts = {}) {
+  const s = await getSettings();
+  const token = opts.token || s.tgBotToken;
+  const chatId = opts.chatId || s.tgForumChatId;
+  if (!token || !chatId || !name) return { ok: false, error: 'missing token/forumChatId/name' };
+  return tgApi(token, 'createForumTopic', { chat_id: chatId, name: String(name).slice(0, 128) });
+}
+
+async function tgAnswerCallback(callbackQueryId, text) {
+  const s = await getSettings();
+  if (!s.tgBotToken || !callbackQueryId) return { ok: false, error: 'missing token/callbackQueryId' };
+  return tgApi(s.tgBotToken, 'answerCallbackQuery', { callback_query_id: callbackQueryId, text: text || '' });
 }
 
 // ---- Telegram inbound (long poll) ----
@@ -83,6 +98,21 @@ async function tgPoll() {
     let newOffset = offset;
     for (const upd of data.result) {
       newOffset = upd.update_id + 1;
+      const cb = upd.callback_query;
+      if (cb && cb.data) {
+        const msg = cb.message || {};
+        inbound.push({
+          text: '',
+          callbackData: cb.data,
+          callbackId: cb.id,
+          chatId: msg.chat && msg.chat.id,
+          threadId: msg.message_thread_id || null,
+          messageId: msg.message_id || null,
+          from: cb.from && cb.from.id,
+          at: Date.now(),
+        });
+        continue;
+      }
       const msg = upd.message || upd.edited_message;
       if (!msg || !msg.text) continue;
       inbound.push({
@@ -119,6 +149,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'tg-send') {
     tgSend(message.text, message).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (message.type === 'tg-create-topic') {
+    tgCreateTopic(message.name, message).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (message.type === 'tg-answer-callback') {
+    tgAnswerCallback(message.callbackQueryId, message.text).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (message.type === 'tg-poll-now') {

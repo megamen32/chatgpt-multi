@@ -43,21 +43,38 @@
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
       "all_frames": true,
       "run_at": "document_start",
       "world": "ISOLATED",
-      "js": ["src/lib/settings.js", "src/content/settings-bridge.js"]
+      "js": [
+        "src/lib/settings.js",
+        "src/content/settings-bridge.js"
+      ]
     },
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
       "all_frames": true,
       "run_at": "document_start",
       "world": "MAIN",
-      "js": ["src/lib/conversation-trim.js", "src/lib/cache-policy.js", "src/content/chat-cache.js", "src/content/perf-fetch-trim.js"]
+      "js": [
+        "src/lib/conversation-trim.js",
+        "src/lib/cache-policy.js",
+        "src/content/chat-cache.js",
+        "src/content/perf-fetch-trim.js"
+      ]
     },
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
       "all_frames": true,
       "run_at": "document_idle",
       "world": "ISOLATED",
@@ -76,9 +93,12 @@
         "src/content/features/queue.js",
         "src/content/features/collapse.js",
         "src/content/agent-runtime.js",
-        "src/content/features-bundle.js"
+        "src/content/features-bundle.js",
+        "src/content/auto-scroll-inactive.js"
       ],
-      "css": ["src/content/features/features.css"]
+      "css": [
+        "src/content/features/features.css"
+      ]
     }
   ],
   "declarative_net_request": {

@@ -61,6 +61,10 @@
         { key: 'tgToolCalls', type: 'select', name: '↳ Tool calls', desc: 'Пересылать ли вызовы инструментов.', options: [['none', 'Не слать'], ['input', 'Только запрос'], ['output', 'Только ответ'], ['both', 'Запрос и ответ']], requires: 'tgEnabled' },
         { key: 'tgSendHidden', type: 'bool', name: '↳ Слать скрытые/рассуждения', desc: 'Включать reasoning/thoughts-сообщения.', requires: 'tgEnabled' },
         { key: 'tgInboundToExecutor', type: 'bool', name: '↳ Из Telegram → в очередь', desc: 'Сообщения боту попадают в очередь исполнителя.', requires: 'tgEnabled' },
+        { key: 'tgForumChatId', type: 'text', name: '↳ Forum group chat_id для /chats', desc: 'Группа с топиками, где бот является админом и создаёт темы.', requires: 'tgEnabled' },
+        { key: 'tgChatsPageSize', type: 'number', min: 1, max: 30, name: '↳ /chats: чатов на страницу', desc: 'Размер страницы inline-списка чатов.', requires: 'tgEnabled' },
+        { key: 'tgAutoScrollInactive', type: 'bool', name: '↳ Автоскролл TG-панелей', desc: 'Когда пользователь неактивен больше минуты, привязанные к TG панели скроллятся вниз.', requires: 'tgEnabled' },
+        { key: 'tgAutoScrollInactiveMs', type: 'number', min: 10000, max: 600000, name: '↳ Порог простоя, мс', desc: '60000 = одна минута.', requires: 'tgAutoScrollInactive' },
       ],
     },
     {

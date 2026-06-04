@@ -52,6 +52,10 @@
     tgSendHidden: false, // include hidden/reasoning messages
     tgSendAgentOpinion: false, // include the agent's "what's missing" opinion
     tgInboundToExecutor: true, // route TG messages into the executor's queue
+    tgForumChatId: '', // forum group where /chats creates topics
+    tgChatsPageSize: 8, // chats per /chats page
+    tgAutoScrollInactive: true, // auto-scroll TG-bound panes when user is idle
+    tgAutoScrollInactiveMs: 60000,
   };
 
   // Map of setting key -> dataset attribute name on <html> used by MAIN world.

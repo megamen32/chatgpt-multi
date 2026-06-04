@@ -2,11 +2,11 @@
    avoid clashing with ChatGPT's own styles. */
 .cgptmp-queue {
   position: fixed;
-  top: 12px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
-  width: 320px;
-  max-height: 50vh;
+  width: min(360px, calc(100vw - 24px));
+  max-height: 42vh;
   display: flex;
   flex-direction: column;
   background: rgba(24, 25, 29, 0.97);
@@ -18,14 +18,17 @@
   z-index: 2147483646;
   overflow: hidden;
 }
-.cgptmp-queue.collapsed { max-height: none; }
+.cgptmp-queue.collapsed { width: auto; min-width: 132px; max-height: none; border-radius: 999px; opacity: .82; }
+.cgptmp-queue.collapsed:hover { opacity: 1; }
 .cgptmp-queue.collapsed .cgptmp-q-list,
-.cgptmp-queue.collapsed .cgptmp-q-input { display: none; }
+.cgptmp-queue.collapsed .cgptmp-q-input,
+.cgptmp-queue.collapsed [data-act="pause"],
+.cgptmp-queue.collapsed [data-act="clear"] { display: none; }
 .cgptmp-q-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   cursor: grab;
 }

@@ -20,6 +20,7 @@
       let sending = false;
       let lastSendAt = 0;
       let pollId = null;
+      let lastInterceptAt = 0;
 
       // restore persisted queue for this conversation
       chrome.storage.local.get([storageKey()], (res) => {
@@ -30,7 +31,7 @@
 
       // ---- UI ----
       const panel = document.createElement('div');
-      panel.className = 'cgptmp-queue';
+      panel.className = 'cgptmp-queue collapsed';
       panel.innerHTML = `
         <div class="cgptmp-q-head">
           <span class="cgptmp-q-grip" title="Перетащить">⋮⋮</span>
@@ -47,12 +48,12 @@
 
       // collapse / expand
       const collapseBtn = panel.querySelector('[data-act="collapse"]');
-      let collapsed = false;
+      let collapsed = true;
       function applyCollapsed() {
         panel.classList.toggle('collapsed', collapsed);
         collapseBtn.textContent = collapsed ? '▸' : '▾';
         collapseBtn.title = collapsed ? 'Развернуть' : 'Свернуть';
-        chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos } });
+        chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos, version: 2 } });
       }
       collapseBtn.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
 
@@ -69,7 +70,7 @@
           panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px';
           panel.style.right = 'auto'; panel.style.transform = 'none';
         }
-        function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos } }); }
+        function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); chrome.storage.local.set({ 'cgptmp.queue.ui': { collapsed, pos, version: 2 } }); }
         document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
       });
 
@@ -77,14 +78,15 @@
       chrome.storage.local.get(['cgptmp.queue.ui'], (r) => {
         const ui = r && r['cgptmp.queue.ui'];
         if (ui) {
-          collapsed = !!ui.collapsed; applyCollapsed();
+          collapsed = typeof ui.collapsed === 'boolean' ? ui.collapsed : true; applyCollapsed();
           if (ui.pos) { pos = ui.pos; panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px'; panel.style.right = 'auto'; panel.style.transform = 'none'; }
-        }
+        } else applyCollapsed();
       });
 
       const listEl = panel.querySelector('.cgptmp-q-list');
       const inputEl = panel.querySelector('textarea');
       const pauseBtn = panel.querySelector('[data-act="pause"]');
+      const titleEl = panel.querySelector('.cgptmp-q-title');
 
       function renderList() {
         listEl.replaceChildren();
@@ -97,7 +99,9 @@
           listEl.appendChild(li);
         });
         pauseBtn.textContent = paused ? '▶' : '⏸';
-        panel.dataset.count = String(queue.length);
+        const count = String(queue.length);
+        panel.dataset.count = count;
+        titleEl.dataset.count = count;
       }
       function mkBtn(label, on) {
         const b = document.createElement('button'); b.className = 'cgptmp-q-mini'; b.textContent = label;
@@ -105,12 +109,60 @@
         return b;
       }
 
+      function showQueue() {
+        if (collapsed) { collapsed = false; applyCollapsed(); }
+      }
+      function composerText(el) {
+        if (!el) return '';
+        return (el.tagName === 'TEXTAREA' ? el.value : (el.innerText || el.textContent || '')).trim();
+      }
+      function clearComposer(el) {
+        if (!el) return;
+        if (el.tagName === 'TEXTAREA') {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+          setter.call(el, '');
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          el.focus();
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          sel.addRange(range);
+          document.execCommand('delete', false, null);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+      function enqueueDraft(text, opts = {}) {
+        if (!queue.add(text)) return false;
+        if (opts.reveal !== false) showQueue();
+        persist(); renderList(); maybeSend();
+        return true;
+      }
+
       inputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          if (queue.add(inputEl.value)) { inputEl.value = ''; persist(); renderList(); maybeSend(); }
+          if (enqueueDraft(inputEl.value)) inputEl.value = '';
         }
       });
+      const interceptComposerEnter = (e) => {
+        if (e.defaultPrevented || e.key !== 'Enter' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+        const el = adapter.composer();
+        if (!el || e.target !== el) return;
+        const btn = adapter.sendButton && adapter.sendButton();
+        const cannotSendNow = adapter.isGenerating() || !btn || btn.disabled;
+        if (!cannotSendNow) return;
+        const text = composerText(el);
+        if (!text) return;
+        const now = Date.now();
+        if (now - lastInterceptAt < 300) return;
+        lastInterceptAt = now;
+        e.preventDefault();
+        e.stopPropagation();
+        if (enqueueDraft(text, { reveal: true })) clearComposer(el);
+      };
+      document.addEventListener('keydown', interceptComposerEnter, true);
       panel.querySelector('[data-act="pause"]').addEventListener('click', () => { paused = !paused; persist(); renderList(); maybeSend(); });
       panel.querySelector('[data-act="clear"]').addEventListener('click', () => { queue.clear(); persist(); renderList(); });
 
@@ -143,6 +195,7 @@
         tick() { maybeSend(); },
         dispose() {
           clearInterval(pollId);
+          document.removeEventListener('keydown', interceptComposerEnter, true);
           panel.remove();
         },
       };

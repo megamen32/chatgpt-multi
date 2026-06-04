@@ -36,6 +36,29 @@ const boundGen = new Map();
 const sectionEls = new Map(); // paneId -> <section>
 function saveBound() { chrome.storage.local.set({ [BOUND_KEY]: boundTargets }); }
 
+let lastUserActivityAt = Date.now();
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove']) {
+  window.addEventListener(ev, () => { lastUserActivityAt = Date.now(); }, { passive: true, capture: true });
+}
+function isUserInactiveForTgScroll() {
+  const limit = Number(state.settings && state.settings.tgAutoScrollInactiveMs) || 60000;
+  return Date.now() - lastUserActivityAt >= limit;
+}
+function tickTgAutoScroll() {
+  if (!state.settings || !state.settings.tgEnabled || !state.settings.tgAutoScrollInactive) return;
+  if (!isUserInactiveForTgScroll()) return;
+  for (const [paneId, target] of Object.entries(boundTargets || {})) {
+    if (!target) continue;
+    const iframe = iframeForPane(paneId);
+    if (!iframe || !iframe.contentWindow) continue;
+    try {
+      iframe.contentWindow.postMessage({ source: 'cgptmp', type: 'auto-scroll-if-inactive' }, '*');
+    } catch {}
+  }
+}
+setInterval(tickTgAutoScroll, 5000);
+
+
 function save() { chrome.storage.local.set({ [STORAGE_KEY]: store.snapshot() }); }
 
 // ---------- toast ----------
@@ -296,13 +319,91 @@ function handleStatus(paneId, item) {
     ].join('\n'));
   }).catch(() => tgReply(item, 'Не удалось получить статус (панель спит или грузится).'));
 }
+
+function shortPanePreview(pane) {
+  const parts = [pane.title || 'ChatGPT'];
+  try {
+    const u = new URL(pane.url || '');
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (segs.length) {
+      const middle = segs.length > 2 ? `${segs[0]} … ${segs[Math.floor(segs.length / 2)]} … ${segs[segs.length - 1]}` : segs.join('/');
+      parts.push(middle);
+    }
+  } catch {}
+  const bound = boundTargets[pane.id];
+  if (bound) parts.push(`TG: ${bound.chatId || 'default'}${bound.threadId ? '/' + bound.threadId : ''}`);
+  return parts.join(' · ').slice(0, 180);
+}
+function chatsPagePayload(page = 0) {
+  const pageSize = Math.max(1, Math.min(30, Number(state.settings.tgChatsPageSize) || 8));
+  const panes = state.panes.filter(p => !p.picker);
+  const maxPage = Math.max(0, Math.ceil(panes.length / pageSize) - 1);
+  const p = Math.max(0, Math.min(maxPage, Number(page) || 0));
+  const rows = panes.slice(p * pageSize, (p + 1) * pageSize).map((pane, idx) => ([{
+    text: `${p * pageSize + idx + 1}. ${(pane.title || 'ChatGPT').slice(0, 32)}`,
+    callback_data: `cgptmp:chat:${pane.id}`,
+  }]));
+  if (maxPage > 0) {
+    const nav = [];
+    if (p > 0) nav.push({ text: '◀️', callback_data: `cgptmp:page:${p - 1}` });
+    nav.push({ text: `${p + 1}/${maxPage + 1}`, callback_data: `cgptmp:page:${p}` });
+    if (p < maxPage) nav.push({ text: '▶️', callback_data: `cgptmp:page:${p + 1}` });
+    rows.push(nav);
+  }
+  const text = panes.length
+    ? ['💬 Чаты:', ...panes.slice(p * pageSize, (p + 1) * pageSize).map((pane, idx) => `${p * pageSize + idx + 1}. ${shortPanePreview(pane)}`)].join('\n')
+    : 'Пока нет открытых чатов.';
+  return { text, replyMarkup: { inline_keyboard: rows } };
+}
+function sendChatsPage(item, page = 0) {
+  const payload = chatsPagePayload(page);
+  chrome.runtime.sendMessage({
+    type: 'tg-send',
+    text: payload.text,
+    chatId: item.chatId || undefined,
+    messageThreadId: item.threadId || undefined,
+    replyMarkup: payload.replyMarkup,
+  });
+}
+function createTopicForPane(item, paneId) {
+  const pane = state.panes.find(p => p.id === paneId);
+  if (!pane) { tgReply(item, 'Чат не найден.'); return; }
+  const forumChatId = state.settings.tgForumChatId;
+  if (!forumChatId) { tgReply(item, 'В настройках задайте tgForumChatId: группу-форум, где бот админ и может создавать топики.'); return; }
+  chrome.runtime.sendMessage({ type: 'tg-answer-callback', callbackQueryId: item.callbackId, text: 'Создаю топик…' });
+  chrome.runtime.sendMessage({ type: 'tg-create-topic', chatId: forumChatId, name: (pane.title || 'ChatGPT').slice(0, 120) }, (res) => {
+    if (!res || !res.ok || !res.result || !res.result.message_thread_id) {
+      tgReply(item, `Не удалось создать топик: ${res && (res.description || res.error) || 'unknown error'}`);
+      return;
+    }
+    boundTargets[pane.id] = { chatId: forumChatId, threadId: res.result.message_thread_id };
+    saveBound();
+    refreshChrome();
+    tgReply({ chatId: forumChatId, threadId: res.result.message_thread_id }, `✅ Топик привязан к чату:\n${shortPanePreview(pane)}\n\n/link — ссылка\n/status — статус`);
+  });
+}
+function handleCallback(item) {
+  const data = item.callbackData || '';
+  const page = data.match(/^cgptmp:page:(\d+)$/);
+  if (page) { chrome.runtime.sendMessage({ type: 'tg-answer-callback', callbackQueryId: item.callbackId, text: 'Страница' }); sendChatsPage(item, Number(page[1])); return true; }
+  const chat = data.match(/^cgptmp:chat:(.+)$/);
+  if (chat) { createTopicForPane(item, chat[1]); return true; }
+  return false;
+}
+
 function handleInbound(items) {
   if (!state.settings.tgEnabled) return;
   for (const it of items) {
+    if (it.callbackData) { handleCallback(it); continue; }
     const text = (it.text || '').trim();
     let paneId = paneForTarget(it.chatId, it.threadId);
     if (!paneId) { const st = goalController.getStatus(); paneId = st.active ? st.executorPaneId : state.focusedId; }
 
+    if (/^\/chats(?:\s+(\d+))?\b/i.test(text)) {
+      const m = text.match(/^\/chats(?:\s+(\d+))?\b/i);
+      sendChatsPage(it, m && m[1] ? Number(m[1]) - 1 : 0);
+      continue;
+    }
     if (/^\/link\b/i.test(text)) {
       const pane = state.panes.find(p => p.id === paneId);
       tgReply(it, pane ? `🔗 ${pane.title}\n${pane.url}` : 'Нет привязанного чата. Нажмите 📤 на нужной панели.');
@@ -315,7 +416,7 @@ function handleInbound(items) {
       continue;
     }
     if (/^\/help\b/i.test(text)) {
-      tgReply(it, 'Команды:\n/id — chat_id и topic_id этого места (для кнопки 📤)\n/link — ссылка на чат\n/status — состояние чата\nЛюбой другой текст уходит в очередь чата.');
+      tgReply(it, 'Команды:\n/chats — список чатов с кнопками и страницами\n/id — chat_id и topic_id этого места (для кнопки 📤)\n/link — ссылка на чат\n/status — состояние чата\nЛюбой другой текст уходит в очередь чата.');
       continue;
     }
     if (!state.settings.tgInboundToExecutor) continue;
